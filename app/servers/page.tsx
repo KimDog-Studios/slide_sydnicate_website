@@ -323,6 +323,7 @@ export default function page() {
 							</div>
 						</div>
 
+
 						{/* Body now flexes and scrolls within the taller modal */}
 						<div style={{ flex: 1, overflow: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
 							{/* Region */}
@@ -339,7 +340,7 @@ export default function page() {
 												{r === "EU" ? (
 													<img
 														src="https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/Flag_of_Europe.svg.png"
-														alt=""
+														alt="EU"
 														aria-hidden="true"
 														style={{ width: 28, height: 18, objectFit: 'contain', marginLeft: 6 }}
 													/>
