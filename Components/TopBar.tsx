@@ -12,7 +12,8 @@ function TopBar() {
 
 	// Discord OAuth redirect
 	const handleDiscordLogin = () => {
-		const redirectUri = "https://slide-syndicate.com/api/auth/discord/callback";
+		const origin = typeof window !== "undefined" ? window.location.origin : "https://www.slide-syndicate.com";
+		const redirectUri = `${origin}/api/auth/discord/callback`;
 		const params = new URLSearchParams({
 			client_id: "1432271055304658967",
 			response_type: "code",
