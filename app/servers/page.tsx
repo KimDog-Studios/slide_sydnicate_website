@@ -1,110 +1,388 @@
 "use client";
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react"
-import Box from "@mui/material/Box"
-import Button from "@mui/material/Button"
-import TextField from "@mui/material/TextField"
-import Pagination from "@mui/material/Pagination"
-import Dialog from "@mui/material/Dialog"
-import DialogTitle from "@mui/material/DialogTitle"
-import DialogContent from "@mui/material/DialogContent"
-import DialogActions from "@mui/material/DialogActions"
-import IconButton from "@mui/material/IconButton"
-import Divider from "@mui/material/Divider"
-import Checkbox from "@mui/material/Checkbox"
-import FormControlLabel from "@mui/material/FormControlLabel"
-import FormGroup from "@mui/material/FormGroup"
-import SearchIcon from "@mui/icons-material/Search"
-import SortIcon from "@mui/icons-material/Sort"
-import FilterListIcon from "@mui/icons-material/FilterList"
-import RefreshIcon from "@mui/icons-material/Refresh"
-import PeopleIcon from "@mui/icons-material/People"
-import DirectionsCarIcon from "@mui/icons-material/DirectionsCar"
-import PublicIcon from "@mui/icons-material/Public"
-import MapIcon from "@mui/icons-material/Map"
-import TrafficIcon from "@mui/icons-material/Traffic"
-import CloseIcon from "@mui/icons-material/Close"
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import Pagination from "@mui/material/Pagination";
 
 // config
-import { DEFAULT_IP, SERVERS, type Server } from "./config"
+import { DEFAULT_IP, SERVERS, type Server } from "./config";
+import FilterModal from "./components/FilterModal";
+import JoinModal from "./components/JoinModal";
+import OfflineModal from "./components/OfflineModal";
+import Toolbar from "./components/Toolbar";
+import CountdownSummary from "./components/CountdownSummary";
+import ServerRow from "./components/ServerRow";
 
-type OrderKey = "name" | "tier" | "region" | "carPack" | "players" | "trafficDensity" | "map"
+type OrderKey = "name" | "tier" | "region" | "carPack" | "players" | "trafficDensity" | "map";
+type LiveCount = { players: number; maxPlayers: number; online: boolean };
 
-const VIDEO_SRC = "/videos/bg.mp4"
+const VIDEO_SRC = "/videos/bg.mp4";
+const PAGE_SIZE = 10;
+const DEBUG_INFO = false;
 
-// small helper to map tier names/aliases to display label + colors (drifting-themed)
+// tier helpers (same looks)
 const getTierMeta = (t?: string | null) => {
 	const k = (t ?? "").toLowerCase().trim();
-	// Drifting tiers (with legacy aliases)
-	if (["tier 0", "public", "beginner access", "beginner"].includes(k))
-		return { label: "Beginner Access", gradient: "linear-gradient(90deg,#374151,#6b7280)" };
-	if (["tier 1", "public+", "streetline", "street"].includes(k))
-		return { label: "Streetline", gradient: "linear-gradient(90deg,#3b82f6,#06b6d4)" };
-	if (["tier 2", "midnight", "tandem club", "tandem"].includes(k))
-		return { label: "Tandem Club", gradient: "linear-gradient(90deg,#a855f7,#f59e0b)" };
-	if (["tier 3", "underground", "pro line", "proline", "pro"].includes(k))
-		return { label: "Pro Line", gradient: "linear-gradient(90deg,#ff3d6e,#ff8c42)" };
-
-	// Legacy metals (kept for compatibility)
+	if (["tier 0", "public", "beginner access", "beginner"].includes(k)) return { label: "Beginner Access", gradient: "linear-gradient(90deg,#374151,#6b7280)" };
+	if (["tier 1", "public+", "streetline", "street"].includes(k)) return { label: "Streetline", gradient: "linear-gradient(90deg,#3b82f6,#06b6d4)" };
+	if (["tier 2", "midnight", "tandem club", "tandem"].includes(k)) return { label: "Tandem Club", gradient: "linear-gradient(90deg,#a855f7,#f59e0b)" };
+	if (["tier 3", "underground", "pro line", "proline", "pro"].includes(k)) return { label: "Pro Line", gradient: "linear-gradient(90deg,#ff3d6e,#ff8c42)" };
 	if (k === "bronze") return { label: "Bronze", gradient: "linear-gradient(90deg,#7c3a00,#b7791f)" };
 	if (k === "silver") return { label: "Silver", gradient: "linear-gradient(90deg,#64748b,#94a3b8)" };
 	if (k === "gold") return { label: "Gold", gradient: "linear-gradient(90deg,#b45309,#f59e0b)" };
 	if (k === "platinum") return { label: "Platinum", gradient: "linear-gradient(90deg,#0ea5a4,#06b6d4)" };
-
-	// Fallback (public/default)
 	return { label: t ?? "Public", gradient: "linear-gradient(90deg,#374151,#6b7280)" };
 };
 const tierLabel = (t?: string | null) => getTierMeta(t).label;
 const tierColor = (t?: string | null) => getTierMeta(t).gradient;
 
+// fetch helpers
+const fetchWithTimeout = async (url: string, timeout = 2000) => {
+	const controller = new AbortController();
+	const id = setTimeout(() => controller.abort(), timeout);
+	try {
+		const res = await fetch(url, { signal: controller.signal, cache: "no-store" });
+		clearTimeout(id);
+		return res;
+	} catch (err) {
+		clearTimeout(id);
+		throw err;
+	}
+};
+const promiseWithTimeout = async <T,>(p: Promise<T>, ms = 8000): Promise<T> => {
+	let id: ReturnType<typeof setTimeout> | null = null;
+	const timeout = new Promise<never>((_, rej) => {
+		id = setTimeout(() => rej(new Error("timeout")), ms);
+	});
+	try {
+		return (await Promise.race([p, timeout])) as T;
+	} finally {
+		if (id) clearTimeout(id);
+	}
+};
+
+// probe one server for live counts
 export default function page() {
-	// UI state
-	const [searchInput, setSearchInput] = useState("")
-	const [searchName, setSearchName] = useState("")
-	const [tier, setTier] = useState<string>("All")
-	const [region, setRegion] = useState<string>("All")
-	const [minPlayers, setMinPlayers] = useState<number>(0)
-	const [maxPlayers, setMaxPlayers] = useState<number>(32)
-	const [selectedCarPacks, setSelectedCarPacks] = useState<Set<string>>(new Set())
-	const [selectedMaps, setSelectedMaps] = useState<Set<string>>(new Set())
-	const [selectedTraffic, setSelectedTraffic] = useState<Set<string>>(new Set())
-	// modal flag for filter panel
-	const [filterModalOpen, setFilterModalOpen] = useState<boolean>(false)
-	// sorting state (was missing — required by handleSort/displayed)
-	const [orderBy, setOrderBy] = useState<OrderKey>("name")
-	const [orderDirection, setOrderDirection] = useState<"asc" | "desc">("asc")
-	// pagination & refresh
-	const [page, setPage] = useState<number>(1)
-	const PAGE_SIZE = 10
-	const [secondsLeft, setSecondsLeft] = useState<number>(60)
-	const [isFetching, setIsFetching] = useState<boolean>(true)
-	const [refreshKey, setRefreshKey] = useState<number>(0)
+	// filters/sorting/pagination
+	const [searchInput, setSearchInput] = useState("");
+	const [searchName, setSearchName] = useState("");
+	const [tier, setTier] = useState<string>("All");
+	const [region, setRegion] = useState<string>("All");
+	const [minPlayers, setMinPlayers] = useState<number>(0);
+	const [maxPlayers, setMaxPlayers] = useState<number>(32);
+	const [selectedCarPacks, setSelectedCarPacks] = useState<Set<string>>(new Set());
+	const [selectedMaps, setSelectedMaps] = useState<Set<string>>(new Set());
+	const [selectedTraffic, setSelectedTraffic] = useState<Set<string>>(new Set());
+	// include offline servers toggle (hidden by default)
+	const [showOffline, setShowOffline] = useState<boolean>(false);
+	const [filterModalOpen, setFilterModalOpen] = useState<boolean>(false);
 
-	// live counts cache
-	const [serverCounts, setServerCounts] = useState<Record<string, { players: number; maxPlayers: number }>>({})
+	const [orderBy, setOrderBy] = useState<OrderKey>("name");
+	const [orderDirection, setOrderDirection] = useState<"asc" | "desc">("asc");
+	const [pageIdx, setPageIdx] = useState<number>(1);
 
-	// track recent changes to highlight rows briefly
-	const prevCountsRef = useRef<Record<string, { players: number; maxPlayers: number }> | null>(null)
-	const [changedIds, setChangedIds] = useState<Set<string>>(new Set())
+	// refresh/countdown
+	const [secondsLeft, setSecondsLeft] = useState<number>(60);
+	const [isFetching, setIsFetching] = useState<boolean>(false);
+	const [refreshKey, setRefreshKey] = useState<number>(0);
 
-	// Join modal state & countdown (now includes server id and metadata)
-	const [joinModalOpen, setJoinModalOpen] = useState(false)
+	// live counts + change flash
+	const [serverCounts, setServerCounts] = useState<Record<string, LiveCount>>({});
+	const [changedIds, setChangedIds] = useState<Set<string>>(new Set());
+	const changeFlashTimeoutRef = useRef<number | null>(null);
+
+	// join modal
+	const [joinModalOpen, setJoinModalOpen] = useState(false);
 	const [joinInfo, setJoinInfo] = useState<{
-		id?: string
-		url: string
-		name: string
-		thumbnail?: string
-		carPack?: string | null
-		region?: string | null
-		tier?: string | null
-	} | null>(null)
-	const [joinCountdown, setJoinCountdown] = useState<number>(5)
-	const joinTimerRef = useRef<number | null>(null)
-	// remember initial join duration so progress mirrors the server timer (decreasing)
-	const joinInitialRef = useRef<number>(5)
+		id?: string;
+		url: string;
+		name: string;
+		thumbnail?: string;
+		carPack?: string | null;
+		region?: string | null;
+		tier?: string | null;
+	} | null>(null);
+	const [joinCountdown, setJoinCountdown] = useState<number>(5);
+	const joinTimerRef = useRef<number | null>(null);
+	const joinInitialRef = useRef<number>(5);
 
-	// open with full server object so modal can show thumbnail/tier/carpack/region
+	// offline modal
+	const [offlineModalOpen, setOfflineModalOpen] = useState(false);
+	const [offlineServerName, setOfflineServerName] = useState<string>("");
+
+	// Endpoint hint cache so we try the last working endpoint first (must be inside component)
+	const endpointHintRef = useRef<Record<string, { base: string; path: string; protocol: "http" | "https" }>>({});
+	// Offline hysteresis to avoid flapping on transient failures (inside component)
+	const offlineStrikesRef = useRef<Record<string, number>>({});
+
+	// debounce search
+	useEffect(() => {
+		const t = setTimeout(() => setSearchName(searchInput), 400);
+		return () => clearTimeout(t);
+	}, [searchInput]);
+
+	// helpers
+	const toggleSetValue = (current: Set<string>, val: string, setter: (s: Set<string>) => void) => {
+		const next = new Set(current);
+		if (next.has(val)) next.delete(val);
+		else next.add(val);
+		setter(next);
+	};
+	const handleSort = (key: OrderKey) => {
+		if (key === orderBy) setOrderDirection((d) => (d === "asc" ? "desc" : "asc"));
+		else {
+			setOrderBy(key);
+			setOrderDirection("asc");
+		}
+	};
+	const openFilter = () => setFilterModalOpen(true);
+	const closeFilter = () => setFilterModalOpen(false);
+	const clearFiltersInModal = () => {
+		setSelectedCarPacks(new Set());
+		setSelectedMaps(new Set());
+		setSelectedTraffic(new Set());
+		setTier("All");
+		setRegion("All");
+		setMinPlayers(0);
+		setMaxPlayers(32);
+	};
+	const applyFilters = () => closeFilter();
+	const resetAll = () => {
+		setSearchInput("");
+		setSearchName("");
+		setTier("All");
+		setRegion("All");
+		setSelectedCarPacks(new Set());
+		setSelectedMaps(new Set());
+		setSelectedTraffic(new Set());
+		setMinPlayers(0);
+		setMaxPlayers(32);
+		setPageIdx(1);
+	};
+
+	// options
+	const TIERS = useMemo(() => Array.from(new Set(SERVERS.map((s) => s.tier))).sort(), []);
+	const REGIONS = useMemo(() => Array.from(new Set(SERVERS.map((s) => s.region))).sort(), []);
+ 	const CARPACKS = useMemo(() => Array.from(new Set(SERVERS.map((s) => s.carPack ?? "Default"))).sort(), []);
+	const TRAFFICS = useMemo(() => Array.from(new Set(SERVERS.map((s) => s.trafficDensity))).sort(), []);
+	const MAPS = useMemo(() => Array.from(new Set(SERVERS.map((s) => s.map))).sort(), []);
+
+	// filter/sort/page
+	const filtered = useMemo(() => {
+		return SERVERS.filter((s) => {
+			if (searchName && !s.name.toLowerCase().includes(searchName.toLowerCase())) return false;
+			if (tier !== "All" && s.tier !== tier) return false;
+			if (region !== "All" && s.region !== region) return false;
+			if (s.players < minPlayers) return false;
+			if (s.players > maxPlayers) return false;
+			if (selectedTraffic.size > 0 && !selectedTraffic.has(s.trafficDensity)) return false;
+			const carPackKey = s.carPack ?? "Default";
+			if (selectedCarPacks.size > 0 && !selectedCarPacks.has(carPackKey)) return false;
+			if (selectedMaps.size > 0 && !selectedMaps.has(s.map)) return false;
+			// hide offline servers unless explicitly included
+			if (!showOffline) {
+				// Only hide when we positively know it's offline; include unknowns so first view isn't empty
+				const stat = serverCounts[s.id];
+				if (stat && stat.online !== true) return false;
+			}
+			return true;
+		});
+	}, [searchName, tier, region, minPlayers, maxPlayers, selectedTraffic, selectedCarPacks, selectedMaps, showOffline, serverCounts]);
+
+	const displayed = useMemo(() => {
+		const arr = [...filtered];
+		arr.sort((a, b) => {
+			let cmp = 0;
+			if (orderBy === "players") {
+				// Use only live JSON counts; avoid falling back to config values
+				const pa = serverCounts[a.id]?.players ?? 0;
+				const pb = serverCounts[b.id]?.players ?? 0;
+				cmp = pa - pb;
+			} else {
+				const va = String(orderBy === "carPack" ? (a.carPack ?? "Default") : (a as any)[orderBy] ?? "").toLowerCase();
+				const vb = String(orderBy === "carPack" ? (b.carPack ?? "Default") : (b as any)[orderBy] ?? "").toLowerCase();
+				cmp = va < vb ? -1 : va > vb ? 1 : 0;
+			}
+			if (cmp === 0) cmp = a.name.localeCompare(b.name);
+			return orderDirection === "asc" ? cmp : -cmp;
+		});
+		return arr;
+	}, [filtered, orderBy, orderDirection, serverCounts]);
+
+	const pageCount = Math.max(1, Math.ceil(displayed.length / PAGE_SIZE));
+	const paginated = displayed.slice((pageIdx - 1) * PAGE_SIZE, pageIdx * PAGE_SIZE);
+	const paginatedIds = useMemo(() => paginated.map((s) => s.id).join(","), [paginated]);
+
+	// keep in range, reset when filters change
+	useEffect(() => {
+		if (pageIdx > pageCount) setPageIdx(pageCount);
+	}, [pageIdx, pageCount]);
+	useEffect(() => {
+		setPageIdx(1);
+	}, [searchName, tier, region, minPlayers, maxPlayers, selectedCarPacks, selectedMaps, selectedTraffic, showOffline]);
+
+	// when hiding offline servers, prefetch live status for all filtered candidates
+	// so the table and pagination reflect only online servers
+	const filteredIds = useMemo(() => SERVERS
+		.filter((s) => {
+			if (searchName && !s.name.toLowerCase().includes(searchName.toLowerCase())) return false;
+			if (tier !== "All" && s.tier !== tier) return false;
+			if (region !== "All" && s.region !== region) return false;
+			if (s.players < minPlayers) return false;
+			if (s.players > maxPlayers) return false;
+			if (selectedTraffic.size > 0 && !selectedTraffic.has(s.trafficDensity)) return false;
+			const carPackKey = s.carPack ?? "Default";
+			if (selectedCarPacks.size > 0 && !selectedCarPacks.has(carPackKey)) return false;
+			if (selectedMaps.size > 0 && !selectedMaps.has(s.map)) return false;
+			return true;
+		})
+		.map((s) => s.id), [searchName, tier, region, minPlayers, maxPlayers, selectedTraffic, selectedCarPacks, selectedMaps]);
+
+	useEffect(() => {
+		if (showOffline) return; // no need when showing offline
+		// find filtered servers that don't have a status yet
+		const missing = SERVERS.filter((s) => filteredIds.includes(s.id) && serverCounts[s.id] === undefined);
+		if (missing.length === 0) return;
+		// background prefetch without toggling isFetching to avoid UI flicker
+		void (async () => {
+			try {
+				await fetchCountsForServers(missing, { concurrency: 2, perRequestTimeout: 2500 });
+			} catch {
+				// ignore
+			}
+		})();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [filteredIds.join(","), showOffline]);
+
+	// counts fetch: limited concurrency workers, mark offline when miss
+	const fetchCountsForServers = useCallback(async (servers: Server[], opts?: { concurrency?: number; perRequestTimeout?: number }) => {
+		const concurrency = Math.max(1, opts?.concurrency ?? 2);
+		const perRequestTimeout = opts?.perRequestTimeout ?? 2500;
+		const results: Record<string, { players: number; maxPlayers: number; chosen?: { base: string; path: string; protocol: "http" | "https" } }> = {};
+		let idx = 0;
+
+		const workers = Array.from({ length: concurrency }).map(async () => {
+			while (true) {
+				const i = idx++;
+				if (i >= servers.length) break;
+				const s = servers[i];
+				try {
+					const hint = endpointHintRef.current[s.id];
+					const data = await fetchServerCount(s, perRequestTimeout, hint);
+					if (data) {
+						results[s.id] = data;
+						if (data.chosen) endpointHintRef.current[s.id] = data.chosen;
+					}
+				} catch {
+					// ignore
+				}
+			}
+		});
+		await Promise.all(workers);
+
+		// Build final map with online/offline
+		const final: Record<string, LiveCount> = {};
+		for (const s of servers) {
+			const hit = results[s.id];
+			if (hit) {
+				// success resets offline strikes
+				offlineStrikesRef.current[s.id] = 0;
+				// Clamp players to [0, max] to avoid bad/stale values
+				const max = Math.max(0, hit.maxPlayers);
+				const players = Math.max(0, Math.min(hit.players, max));
+				final[s.id] = { players, maxPlayers: max, online: true };
+			} else {
+				// increment strikes and only go offline after 2 consecutive misses
+				const prevStrikes = offlineStrikesRef.current[s.id] ?? 0;
+				const strikes = prevStrikes + 1;
+				offlineStrikesRef.current[s.id] = strikes;
+				const prev = serverCounts[s.id];
+				if (prev && strikes < 2) {
+					// keep previous live value to avoid flicker on transient errors
+					final[s.id] = prev;
+				} else {
+					final[s.id] = { players: 0, maxPlayers: s.maxPlayers ?? 0, online: false };
+				}
+			}
+		}
+
+		// Merge + compute changed ids to flash
+		setServerCounts((prev) => {
+			const next: Record<string, LiveCount> = { ...prev, ...final };
+			const changed = new Set<string>();
+			for (const id of Object.keys(final)) {
+				const before = prev[id]?.players;
+				const after = next[id]?.players;
+				if (typeof before === "number" && typeof after === "number" && before !== after) {
+					changed.add(id);
+				}
+			}
+			if (changed.size) {
+				setChangedIds(changed);
+				if (changeFlashTimeoutRef.current) clearTimeout(changeFlashTimeoutRef.current);
+				changeFlashTimeoutRef.current = window.setTimeout(() => setChangedIds(new Set()), 2200);
+			}
+			return next;
+		});
+	}, []);
+
+	// do refresh for current page
+	const doRefresh = useCallback(async () => {
+		if (isFetching) return;
+		setIsFetching(true);
+		try {
+			await promiseWithTimeout(fetchCountsForServers(paginated, { concurrency: 2, perRequestTimeout: 2500 }), 12000);
+		} catch {
+			// ignore
+		} finally {
+			setIsFetching(false);
+			setSecondsLeft(60);
+			setRefreshKey((k) => k + 1);
+		}
+	}, [isFetching, paginated, fetchCountsForServers]);
+
+	// initial/page-change fetch
+	useEffect(() => {
+		let cancelled = false;
+		(async () => {
+			setIsFetching(true);
+			try {
+				await promiseWithTimeout(fetchCountsForServers(paginated, { concurrency: 2, perRequestTimeout: 2500 }), 12000);
+			} catch {
+				// ignore
+			} finally {
+				if (!cancelled) {
+					setIsFetching(false);
+					setSecondsLeft(60);
+				}
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [paginatedIds, fetchCountsForServers]);
+
+	// countdown -> auto refresh
+	useEffect(() => {
+		const id = setInterval(() => {
+			setSecondsLeft((s) => {
+				if (isFetching) return s;
+				if (s <= 1) {
+					doRefresh();
+					return 60;
+				}
+				return s - 1;
+			});
+		}, 1000);
+		return () => clearInterval(id);
+	}, [doRefresh, isFetching]);
+
+	// manual refresh
+	const refreshNow = async () => {
+		await doRefresh();
+	};
+
+	// join modal open/close
 	const openJoinModal = (server: Server, url: string, seconds = 5) => {
-		joinInitialRef.current = seconds
+		joinInitialRef.current = seconds;
 		setJoinInfo({
 			id: server.id,
 			name: server.name,
@@ -113,351 +391,69 @@ export default function page() {
 			carPack: server.carPack ?? "Default Pack",
 			region: server.region,
 			tier: server.tier,
-		})
-		setJoinCountdown(seconds)
-		setJoinModalOpen(true)
-	}
-
+		});
+		setJoinCountdown(seconds);
+		setJoinModalOpen(true);
+	};
 	const closeJoinModal = () => {
-		setJoinModalOpen(false)
-		setJoinInfo(null)
-		setJoinCountdown(5)
+		setJoinModalOpen(false);
+		setJoinInfo(null);
+		setJoinCountdown(5);
 		if (joinTimerRef.current) {
-			clearInterval(joinTimerRef.current)
-			joinTimerRef.current = null
+			clearInterval(joinTimerRef.current);
+			joinTimerRef.current = null;
 		}
-	}
-
-	// start countdown and open join URL in a new tab when it hits zero
+	};
 	useEffect(() => {
-		if (!joinModalOpen || !joinInfo) return
-		// ensure any previous timer cleared
+		if (!joinModalOpen || !joinInfo) return;
 		if (joinTimerRef.current) {
-			clearInterval(joinTimerRef.current)
-			joinTimerRef.current = null
+			clearInterval(joinTimerRef.current);
+			joinTimerRef.current = null;
 		}
 		joinTimerRef.current = window.setInterval(() => {
 			setJoinCountdown((c) => {
 				if (c <= 1) {
 					if (joinTimerRef.current) {
-						clearInterval(joinTimerRef.current)
-						joinTimerRef.current = null
+						clearInterval(joinTimerRef.current);
+						joinTimerRef.current = null;
 					}
-					// open in a new tab and close modal
-					if (joinInfo?.url) window.open(joinInfo.url, "_blank", "noopener,noreferrer")
-					closeJoinModal()
-					return 0
+					if (joinInfo?.url) window.open(joinInfo.url, "_blank", "noopener,noreferrer");
+					closeJoinModal();
+					return 0;
 				}
-				return c - 1
-			})
-		}, 1000)
+				return c - 1;
+			});
+		}, 1000);
 		return () => {
 			if (joinTimerRef.current) {
-				clearInterval(joinTimerRef.current)
-				joinTimerRef.current = null
+				clearInterval(joinTimerRef.current);
+				joinTimerRef.current = null;
 			}
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [joinModalOpen, joinInfo])
+		};
+	}, [joinModalOpen, joinInfo]);
 
-	// debounce searchInput -> searchName
-	useEffect(() => {
-		const t = setTimeout(() => setSearchName(searchInput), 500)
-		return () => clearTimeout(t)
-	}, [searchInput])
+	// offline modal helpers
+	const openOfflineModal = (name: string) => {
+		setOfflineServerName(name);
+		setOfflineModalOpen(true);
+	};
+	const closeOfflineModal = () => {
+		setOfflineModalOpen(false);
+		setOfflineServerName("");
+	};
 
-	// fetch with timeout helper
-	const fetchWithTimeout = async (url: string, timeout = 2000) => {
-		const controller = new AbortController()
-		const id = setTimeout(() => controller.abort(), timeout)
-		try {
-			const res = await fetch(url, { signal: controller.signal })
-			clearTimeout(id)
-			return res
-		} catch (err) {
-			clearTimeout(id)
-			throw err
-		}
-	}
+	// totals
+	const totalPlayers = useMemo(() => SERVERS.reduce((sum, s) => sum + (serverCounts[s.id]?.players ?? 0), 0), [serverCounts]);
+	const totalMaxPlayers = useMemo(() => SERVERS.reduce((sum, s) => sum + (serverCounts[s.id]?.maxPlayers ?? s.maxPlayers ?? 0), 0), [serverCounts]);
 
-	// helper: promise with timeout (fail-fast to avoid UI getting stuck)
-	const promiseWithTimeout = async <T,>(p: Promise<T>, ms = 8000): Promise<T> => {
-		let id: ReturnType<typeof setTimeout> | null = null
-		const timeout = new Promise<never>((_, rej) => {
-			id = setTimeout(() => rej(new Error("timeout")), ms)
-		})
-		try {
-			return await Promise.race([p, timeout]) as T
-		} finally {
-			if (id) clearTimeout(id)
-		}
-	}
-
-	// probe server for counts (speed-optimized)
-	const fetchServerCount = async (s: Server, perRequestTimeout = 900) => {
-		// only try the primary fast HTTP endpoints — skip slower HTTPS probes
-		const tryUrls = [
-			`http://${DEFAULT_IP}:${s.httpPort}/status`,
-			`http://${DEFAULT_IP}:${s.httpPort}/players.json`,
-		]
-		for (const url of tryUrls) {
-			try {
-				const res = await fetchWithTimeout(url, perRequestTimeout)
-				if (!res.ok) continue
-				const json = await res.json().catch(() => null)
-				if (!json) continue
-				const p =
-					(typeof json.players === "number" && json.players) ||
-					(typeof json.currentPlayers === "number" && json.currentPlayers) ||
-					(typeof json.playersCount === "number" && json.playersCount) ||
-					(typeof json.playerCount === "number" && json.playerCount) ||
-					(Array.isArray(json.players_list) && json.players_list.length) ||
-					undefined
-				const m =
-					(typeof json.maxPlayers === "number" && json.maxPlayers) ||
-					(typeof json.max === "number" && json.max) ||
-					(typeof json.max_players === "number" && json.max_players) ||
-					(typeof s.maxPlayers === "number" && s.maxPlayers)
-				if (typeof p === "number" && typeof m === "number") return { players: p, maxPlayers: m }
-			} catch {
-				/* ignore and try next */
-			}
-		}
-		return undefined
-	}
-
-	// fetch counts for list of servers with limited concurrency
-	const fetchCountsForServers = async (servers: Server[], opts?: { concurrency?: number; perRequestTimeout?: number }) => {
-		const results: Record<string, { players: number; maxPlayers: number }> = {}
-		const concurrency = opts?.concurrency ?? 12
-		const perRequestTimeout = opts?.perRequestTimeout ?? 900
-		let idx = 0
-		const workers = Array.from({ length: concurrency }).map(async () => {
-			while (true) {
-				const i = idx++
-				if (i >= servers.length) break
-				const s = servers[i]
-				try {
-					const data = await fetchServerCount(s, perRequestTimeout)
-					if (data) results[s.id] = data
-				} catch {
-					// ignore per-server errors
-				}
-			}
-		})
-		await Promise.all(workers)
-		setServerCounts((prev) => ({ ...prev, ...results }))
-	}
-
-	// initial fetch on mount
-	useEffect(() => {
-		let mounted = true
-		;(async () => {
-			if (!mounted) return
-			setIsFetching(true)
-			try {
-				// fast foreground: fetch only the first page (very parallel) and wait a short time
-				const firstBatch = SERVERS.slice(0, PAGE_SIZE)
-				await promiseWithTimeout(fetchCountsForServers(firstBatch, { concurrency: 12, perRequestTimeout: 900 }), 4000)
-				// fire-and-forget: background refresh for the remainder with lower concurrency
-				fetchCountsForServers(SERVERS.slice(PAGE_SIZE), { concurrency: 6, perRequestTimeout: 900 }).catch(() => {})
-			} catch {
-				// ignore timeouts / errors — we'll still show any partial data
-			} finally {
-				// short delay so users see banner briefly
-				setTimeout(() => setIsFetching(false), 250)
-			}
-		})()
-		return () => {
-			mounted = false
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [])
-
-	// auto-refresh countdown
-	useEffect(() => {
-		if (isFetching) return
-		const id = setInterval(() => {
-			setSecondsLeft((s) => {
-				if (s <= 1) {
-					// start refresh
-					setIsFetching(true)
-					;(async () => {
-						try {
-							// fast refresh for first page, then background for rest
-							const firstBatch = SERVERS.slice(0, PAGE_SIZE)
-							await promiseWithTimeout(fetchCountsForServers(firstBatch, { concurrency: 12, perRequestTimeout: 900 }), 4000)
-							fetchCountsForServers(SERVERS.slice(PAGE_SIZE), { concurrency: 6, perRequestTimeout: 900 }).catch(() => {})
-						} catch {
-							// ignore timeout / errors
-						} finally {
-							setIsFetching(false)
-							setSecondsLeft(60)
-							setRefreshKey((k) => k + 1)
-						}
-					})()
-					return 60
-				}
-				return s - 1
-			})
-		}, 1000)
-		return () => clearInterval(id)
-	}, [isFetching])
-
-	// filtered list
-	const filtered = useMemo(() => {
-		return SERVERS.filter((s) => {
-			if (searchName && !s.name.toLowerCase().includes(searchName.toLowerCase())) return false
-			if (tier !== "All" && s.tier !== tier) return false
-			if (region !== "All" && s.region !== region) return false
-			if (s.players < minPlayers) return false
-			if (s.players > maxPlayers) return false
-			if (selectedTraffic.size > 0 && !selectedTraffic.has(s.trafficDensity)) return false
-			const carPackKey = s.carPack ?? "Default"
-			if (selectedCarPacks.size > 0 && !selectedCarPacks.has(carPackKey)) return false
-			if (selectedMaps.size > 0 && !selectedMaps.has(s.map)) return false
-			return true
-		})
-	}, [searchName, tier, region, minPlayers, maxPlayers, selectedTraffic, selectedCarPacks, selectedMaps])
-
-	// sorting + displayed + pagination
-	const displayed = useMemo(() => {
-		const arr = [...filtered]
-		arr.sort((a, b) => {
-			let cmp = 0
-			if (orderBy === "players") {
-				const pa = serverCounts[a.id]?.players ?? a.players ?? 0
-				const pb = serverCounts[b.id]?.players ?? b.players ?? 0
-				cmp = pa - pb
-			} else {
-				// normalize values to strings for comparison
-				const va = String(orderBy === "carPack" ? (a.carPack ?? "Default") : (a as any)[orderBy] ?? "").toLowerCase()
-				const vb = String(orderBy === "carPack" ? (b.carPack ?? "Default") : (b as any)[orderBy] ?? "").toLowerCase()
-				cmp = va < vb ? -1 : va > vb ? 1 : 0
-			}
-			// stable tie-breaker by name
-			if (cmp === 0) cmp = a.name.localeCompare(b.name)
-			return orderDirection === "asc" ? cmp : -cmp
-		})
-		return arr
-	}, [filtered, orderBy, orderDirection, serverCounts])
-
-	const pageCount = Math.max(1, Math.ceil(displayed.length / PAGE_SIZE))
-	const paginated = displayed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-
-	// keep current page within bounds when the number of pages changes (prevents jumping to page 1 on refresh)
-	useEffect(() => {
-		if (page > pageCount) setPage(pageCount)
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [pageCount])
-
-	// reset page when filters change
-	useEffect(() => setPage(1), [searchName, tier, region, minPlayers, maxPlayers, selectedCarPacks, selectedMaps, selectedTraffic])
-
-	// helper: toggle item in Set state
-	const toggleSetValue = (current: Set<string>, val: string, setter: (s: Set<string>) => void) => {
-		const copy = new Set(current)
-		if (copy.has(val)) copy.delete(val)
-		else copy.add(val)
-		setter(copy)
-	}
-
-	// available filter options derived from SERVERS
-	const TIERS = useMemo(() => Array.from(new Set(SERVERS.map((s) => s.tier))).sort(), [])
-	const REGIONS = useMemo(() => Array.from(new Set(SERVERS.map((s) => s.region))).sort(), [])
-	const CARPACKS = useMemo(() => Array.from(new Set(SERVERS.map((s) => s.carPack ?? "Default"))).sort(), [])
-	const TRAFFICS = useMemo(() => Array.from(new Set(SERVERS.map((s) => s.trafficDensity))).sort(), [])
-	// MAPS list used by the Map filter card
-	const MAPS = useMemo(() => Array.from(new Set(SERVERS.map((s) => s.map))).sort(), [])
-
-	// open/close handlers for filter modal
-	const openFilter = (_e?: React.MouseEvent<HTMLElement>) => setFilterModalOpen(true)
-	const closeFilter = () => setFilterModalOpen(false)
-
-	// modal actions
-	const clearFiltersInModal = () => {
-		setSelectedCarPacks(new Set())
-		setSelectedMaps(new Set())
-		setSelectedTraffic(new Set())
-		setTier("All")
-		setRegion("All")
-		setMinPlayers(0)
-		setMaxPlayers(32)
-	}
-	const applyFilters = () => {
-		// currently filters are applied live; just close the modal
-		closeFilter()
-	}
-
-	// UI helpers
-	const resetAll = () => {
-		setSearchInput("")
-		setSearchName("")
-		setTier("All")
-		setRegion("All")
-		setSelectedCarPacks(new Set())
-		setSelectedMaps(new Set())
-		setSelectedTraffic(new Set())
-		setMinPlayers(0)
-		setMaxPlayers(32)
-		setPage(1)
-	}
-
-	// sort handler for headers
-	const handleSort = (key: OrderKey) => {
-		if (key === orderBy) {
-			setOrderDirection((d) => (d === "asc" ? "desc" : "asc"))
-		} else {
-			setOrderBy(key)
-			setOrderDirection("asc")
-		}
-	}
-
-	// manual refresh (fast-first-batch then background)
-	const refreshNow = async () => {
-		if (isFetching) return
-		setIsFetching(true)
-		try {
-			const firstBatch = SERVERS.slice(0, PAGE_SIZE)
-			await promiseWithTimeout(fetchCountsForServers(firstBatch, { concurrency: 12, perRequestTimeout: 900 }), 4000)
-			// background fetch remaining servers
-			fetchCountsForServers(SERVERS.slice(PAGE_SIZE), { concurrency: 6, perRequestTimeout: 900 }).catch(() => {})
-		} catch {
-			// ignore timeouts / errors
-		} finally {
-			setIsFetching(false)
-			setSecondsLeft(60)
-			setRefreshKey((k) => k + 1)
-		}
-	}
-
+	// UI (unchanged look-and-feel)
 	return (
 		<React.Fragment>
 			<div>
-				{/* Fullscreen background video (muted, autoplay, loop, no controls) */}
-				<video
-					aria-hidden="true"
-					src={VIDEO_SRC}
-					autoPlay
-					muted
-					loop
-					playsInline
-					preload="auto"
-					style={{
-						position: "fixed",
-						top: 0,
-						left: 0,
-						width: "100vw",
-						height: "100vh",
-						objectFit: "cover",
-						zIndex: 0,
-						border: 0,
-						pointerEvents: "none",
-					}}
-				/>
+				<video aria-hidden="true" src={VIDEO_SRC} autoPlay muted loop playsInline preload="auto" style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", objectFit: "cover", zIndex: 0, border: 0, pointerEvents: "none" }} />
 			</div>
+
 			<div style={{ padding: 30, paddingTop: 50, minHeight: "100vh", color: "#fff", display: "flex", flexDirection: "column", gap: 18, position: "relative", zIndex: 1 }}>
-				{/* heading + toolbar */}
 				<div style={{ display: "flex", justifyContent: "center" }}>
 					<div style={{ width: "100%", maxWidth: 1600, display: "flex", flexDirection: "column", gap: 16 }}>
 						<div>
@@ -465,96 +461,26 @@ export default function page() {
 							<p style={{ marginTop: 6, marginBottom: 0, fontWeight: 700, opacity: 0.95, fontSize: 16 }}>Browse and filter available servers</p>
 						</div>
 
-						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-							<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-								<Box sx={{ display: "flex", alignItems: "center", gap: 1, background: "rgba(0,0,0,0.45)", p: "4px 8px", borderRadius: 1 }}>
-									<SearchIcon sx={{ color: "#fff" }} />
-									<TextField
-										variant="standard"
-										placeholder="Search server name..."
-										value={searchInput}
-										onChange={(e) => setSearchInput(e.target.value)}
-										size="small"
-										disabled={isFetching}
-										InputProps={{ disableUnderline: true, sx: { color: "#fff" } }}
-										sx={{ minWidth: 220 }}
-									/>
-								</Box>
-
-								{/* Sort removed — results are alphabetical. Filter opens a popover */}
-								<Button size="small" variant="outlined" onClick={openFilter} startIcon={<FilterListIcon />} disabled={isFetching} sx={{ color: "#fff" }}>
-									Filter By
-								</Button>
-							</div>
-
-							<div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-								<Button size="small" variant="outlined" onClick={refreshNow} startIcon={<RefreshIcon />} disabled={isFetching} sx={{ color: "#fff", borderColor: "rgba(255,255,255,0.06)" }}>
-									Refresh Now
-								</Button>
-
-								<Button size="small" variant="contained" onClick={resetAll} startIcon={<RefreshIcon />} disabled={isFetching} sx={{ background: "#7c3aed" }}>
-									Reset Filters
-								</Button>
-							</div>
-						</div>
+						{/* Toolbar extracted */}
+						<Toolbar
+							isFetching={isFetching}
+							searchInput={searchInput}
+							setSearchInput={setSearchInput}
+							openFilter={openFilter}
+							refreshNow={refreshNow}
+							resetAll={resetAll}
+						/>
 					</div>
 				</div>
 
-				{/* timer + banner */}
-				<div style={{ display: "flex", alignItems: "center", gap: 12, maxWidth: 1600, margin: "0 auto", width: "100%", padding: "2 8px" }}>
-					<div style={{ flex: 1, height: 8, background: "rgba(255,255,255,0.06)", borderRadius: 6, overflow: "hidden" }}>
-						<div style={{ height: "100%", width: `${(secondsLeft / 60) * 100}%`, background: "linear-gradient(90deg,#7c3aed,#a78bfa)", transition: "width 0.9s linear" }} />
-					</div>
-
-					{/* Show Next refresh, player count (left) and servers found (right) */}
-					<div style={{ minWidth: 260, textAlign: "right", fontWeight: 800, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
-						{isFetching ? (
-							<span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
-								<svg width="20" height="20" viewBox="0 0 24 24"><g><path fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" d="M12 2 A10 10 0 0 1 22 12" /><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite" /></g></svg>
-								<span style={{ fontSize: 13 }}>Fetching servers — updating list</span>
-							</span>
-						) : (
-							<span>Next refresh: {String(Math.floor(secondsLeft / 60)).padStart(2, "0")}:{String(secondsLeft % 60).padStart(2, "0")}</span>
-						)}
-						{/* Row: player count (left) + servers found (right) */}
-						<div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "flex-end", width: "100%" }}>
-							{/* animated green circle with total players */}
-							{/* inline styles for smaller animated badge */}
-							<style>{`
-								@keyframes pc-pulse {
-									0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.6); transform: scale(1); }
-									70% { box-shadow: 0 0 0 8px rgba(34,197,94,0); transform: scale(1.04); }
-									100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); transform: scale(1); }
-								}
-								.pc-circle {
-									width: 28px;
-									height: 28px;
-									border-radius: 50%;
-									display: inline-flex;
-									align-items: center;
-									justify-content: center;
-									background: linear-gradient(135deg,#10b981,#059669);
-									color: #fff;
-									font-weight: 900;
-									font-size: 11px;
-									box-shadow: 0 6px 14px rgba(16,185,129,0.14), inset 0 1px 0 rgba(255,255,255,0.04);
-									animation: pc-pulse 1.8s infinite ease-out;
-									line-height: 1;
-								}
-							`}</style>
-
-							{/* Player counter component — use local proxy to avoid direct cross-origin probes */}
-							<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-								<div className="pc-circle">0</div>
-								<div style={{ fontSize: 13, opacity: 0.85, fontWeight: 800 }}>Players Online</div>
-							</div>
-
-							<div style={{ fontWeight: 800, fontSize: 13 }}>
-								{isFetching ? " " : `${filtered.length} server${filtered.length !== 1 ? "s" : ""} found`}
-							</div>
-						</div>
-					</div>
-				</div>
+				{/* Countdown + totals extracted */}
+				<CountdownSummary
+					secondsLeft={secondsLeft}
+					isFetching={isFetching}
+					totalPlayers={totalPlayers}
+					totalMaxPlayers={totalMaxPlayers}
+					filteredCount={filtered.length}
+				/>
 
 				{isFetching && (
 					<div style={{ maxWidth: 1600, margin: "6px auto 0", padding: "8px", background: "#2a0b51", color: "#fff", borderRadius: 8, fontWeight: 900, textAlign: "center" }}>
@@ -562,44 +488,22 @@ export default function page() {
 					</div>
 				)}
 
-				{/* table header + rows */}
+				{/* table */}
 				<div style={{ width: "100%", maxWidth: 1600, margin: "0 auto", position: "relative" }}>
 					{/* header */}
-					{/* sticky header so users keep context while scrolling */}
 					<div style={{ background: "rgba(10,8,15,0.36)", border: "1px solid rgba(124,58,237,0.06)", padding: 12, color: "#fff", position: "sticky", top: 12, zIndex: 6, backdropFilter: "blur(6px)" }}>
 						<div style={{ display: "grid", gridTemplateColumns: "360px 180px 140px 180px 140px 140px 220px 140px", gap: 8, padding: "8px 12px", fontWeight: 800 }}>
-							{/* clickable headers */}
-							<div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={() => handleSort("name")}>
-								Server Name {orderBy === "name" ? (orderDirection === "asc" ? "▲" : "▼") : null}
-							</div>
-							<div style={{ cursor: "pointer" }} onClick={() => handleSort("tier")}>
-								Tier {orderBy === "tier" ? (orderDirection === "asc" ? "▲" : "▼") : null}
-							</div>
-							<div style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={() => handleSort("region")}>
-								Region {orderBy === "region" ? (orderDirection === "asc" ? "▲" : "▼") : null}
-							</div>
-
-							<div style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={() => handleSort("carPack")}>
-								Car Pack {orderBy === "carPack" ? (orderDirection === "asc" ? "▲" : "▼") : null}
-							</div>
-
-							<div style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={() => handleSort("players")}>
-								Players {orderBy === "players" ? (orderDirection === "asc" ? "▲" : "▼") : null}
-							</div>
-
-							<div style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={() => handleSort("trafficDensity")}>
-								Traffic {orderBy === "trafficDensity" ? (orderDirection === "asc" ? "▲" : "▼") : null}
-							</div>
-
-							<div style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={() => handleSort("map")}>
-								Map {orderBy === "map" ? (orderDirection === "asc" ? "▲" : "▼") : null}
-							</div>
-
+							<div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={() => handleSort("name")}>Server Name {orderBy === "name" ? (orderDirection === "asc" ? "▲" : "▼") : null}</div>
+							<div style={{ cursor: "pointer" }} onClick={() => handleSort("tier")}>Tier {orderBy === "tier" ? (orderDirection === "asc" ? "▲" : "▼") : null}</div>
+							<div style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={() => handleSort("region")}>Region {orderBy === "region" ? (orderDirection === "asc" ? "▲" : "▼") : null}</div>
+							<div style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={() => handleSort("carPack")}>Car Pack {orderBy === "carPack" ? (orderDirection === "asc" ? "▲" : "▼") : null}</div>
+							<div style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={() => handleSort("players")}>Players {orderBy === "players" ? (orderDirection === "asc" ? "▲" : "▼") : null}</div>
+							<div style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={() => handleSort("trafficDensity")}>Traffic {orderBy === "trafficDensity" ? (orderDirection === "asc" ? "▲" : "▼") : null}</div>
+							<div style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={() => handleSort("map")}>Map {orderBy === "map" ? (orderDirection === "asc" ? "▲" : "▼") : null}</div>
 							<div style={{ textAlign: "right" }}>Action</div>
 						</div>
 					</div>
 
-					{/* body */}
 					<div>
 						{isFetching ? (
 							<div role="row" style={{ display: "grid", gridTemplateColumns: "360px 180px 140px 180px 140px 140px 220px 140px", padding: 28, minHeight: 120, borderBottom: "1px solid rgba(255,255,255,0.03)", textAlign: "center", color: "rgba(255,255,255,0.9)", fontWeight: 900 }}>
@@ -609,342 +513,185 @@ export default function page() {
 							<div style={{ padding: 28, textAlign: "center", color: "rgba(255,255,255,0.85)", fontWeight: 700 }}>No servers found — try adjusting filters</div>
 						) : (
 							<>
-								{/* Server card styles for improved spacing & neon outline */}
 								<style>{`
- 									.server-card {
- 										display: grid;
- 										grid-template-columns: 360px 180px 140px 180px 140px 140px 220px 140px;
- 										align-items: center;
- 										gap: 8px;
- 										padding: 14px;
- 										margin-bottom: 12px;
- 										background: rgba(10,8,15,0.45);
- 										border-radius: 12px;
- 										border: 1px solid rgba(139,40,255,0.22);
- 										box-shadow: 0 8px 30px rgba(139,40,255,0.06), 0 0 18px rgba(139,40,255,0.06) inset;
- 										transition: transform 0.14s ease, box-shadow 0.14s ease;
- 									}
- 									.server-card:hover {
- 										transform: translateY(-4px);
- 										box-shadow: 0 18px 50px rgba(139,40,255,0.12), 0 0 28px rgba(139,40,255,0.12) inset;
- 									}
- 									/* briefly pulse background when player count changes */
- 									.server-card.changed {
- 										animation: row-flash 2.2s ease;
- 										box-shadow: 0 20px 48px rgba(124,58,237,0.12), 0 0 24px rgba(124,58,237,0.06) inset;
- 									}
- 									@keyframes row-flash {
- 										0% { background: linear-gradient(90deg, rgba(34,197,94,0.12), rgba(124,58,237,0.06)); transform: translateY(-2px); }
- 										40% { background: rgba(10,8,15,0.62); transform: translateY(0); }
- 										100% { background: rgba(10,8,15,0.45); transform: translateY(0); }
- 									}
- 								`}</style>
+									.server-card { display: grid; grid-template-columns: 360px 180px 140px 180px 140px 140px 220px 140px; align-items: center; gap: 8px; padding: 14px; margin-bottom: 12px; background: rgba(10,8,15,0.45); border-radius: 12px; border: 1px solid rgba(139,40,255,0.22); box-shadow: 0 8px 30px rgba(139,40,255,0.06), 0 0 18px rgba(139,40,255,0.06) inset; transition: transform 0.14s ease, box-shadow 0.14s ease; }
+									.server-card:hover { transform: translateY(-4px); box-shadow: 0 18px 50px rgba(139,40,255,0.12), 0 0 28px rgba(139,40,255,0.12) inset; }
+									.server-card.changed { animation: row-flash 2.2s ease; box-shadow: 0 20px 48px rgba(124,58,237,0.12), 0 0 24px rgba(124,58,237,0.06) inset; }
+									@keyframes row-flash { 0% { background: linear-gradient(90deg, rgba(34,197,94,0.12), rgba(124,58,237,0.06)); transform: translateY(-2px); } 40% { background: rgba(10,8,15,0.62); transform: translateY(0); } 100% { background: rgba(10,8,15,0.45); transform: translateY(0); } }
+								`}</style>
 
-								{paginated.map((s: Server) => {
-									const joinUrl = `https://acstuff.ru/s/q:race/online/join?ip=${encodeURIComponent(DEFAULT_IP)}&httpPort=${encodeURIComponent(String(s.httpPort))}`
-									const live = serverCounts[s.id]
-									return (
- 										<div key={s.id} role="row" className={`server-card${changedIds.has(s.id) ? " changed" : ""}`}>
- 											<div style={{ minWidth: 0 }}>
- 												<div style={{ display: "flex", gap: 12, alignItems: "center", minWidth: 0 }}>
- 													{ s.thumbnail ? <img src={s.thumbnail} alt={s.name} style={{ width: 80, height: 48, objectFit: "cover", borderRadius: 6 }} /> : <div style={{ width: 80, height: 48, background: "linear-gradient(90deg,#0f172a,#24123b)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", borderRadius: 6 }}>{s.map.split(" ").slice(0,2).map((w:string)=>w[0] ?? "").join("")}</div> }
- 													<div style={{ minWidth: 0, overflow: "hidden" }}>
- 														<div style={{ fontSize: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
- 														<div style={{ fontSize: 13, opacity: 0.85, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.map}</div>
- 													</div>
- 												</div>
- 											</div>
-
- 											{/* tier pill (no truncation) */}
- 											<div style={{ whiteSpace: "nowrap" }}>
- 												<span
- 													style={{
- 														display: "inline-block",
- 														padding: "6px 10px",
- 														borderRadius: 999,
- 														background: tierColor(s.tier),
- 														color: "#fff",
- 														fontWeight: 800,
- 														fontSize: 13,
- 													}}
- 												>
- 													{tierLabel(s.tier)}
- 												</span>
- 											</div>
-
- 											<div style={{ display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}><PublicIcon fontSize="small" />{s.region}</div>
-
- 											<div style={{ display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}><DirectionsCarIcon fontSize="small" />{s.carPack ?? "Default Pack"}</div>
-
- 											<div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><PeopleIcon fontSize="small" style={{ marginRight: 6 }} />{live ? `${live.players}/${live.maxPlayers}` : `${s.players}/${s.maxPlayers}`}</div>
-
- 											<div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><TrafficIcon fontSize="small" style={{ marginRight: 6 }} />{s.trafficDensity}</div>
-
- 											<div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><MapIcon fontSize="small" style={{ marginRight: 6 }} />{s.map}</div>
-
- 											<div style={{ textAlign: "right" }}>
- 												<Button size="small" onClick={() => openJoinModal(s, joinUrl, 5)} disabled={isFetching} sx={{ padding: "6px 12px", borderRadius: 1, background: "#7c3aed", color: "#fff", fontWeight: 800, textTransform: "none" }}>
- 													Join
- 												</Button>
- 											</div>
- 										</div>
- 									)
- 								})}
+								{paginated.map((s) => (
+									<ServerRow
+										key={s.id}
+										server={s}
+										// Show only live JSON values; if undefined, the row will display "—" until fetched
+										stat={serverCounts[s.id]}
+										changed={changedIds.has(s.id)}
+										isFetching={isFetching}
+										onJoin={(server, url) => openJoinModal(server, url, 5)}
+										onOffline={(name) => openOfflineModal(name)}
+										tierLabel={tierLabel}
+										tierColor={tierColor}
+									/>
+								))}
 							</>
 						)}
 					</div>
 
-					{/* pagination */}
 					{!isFetching && (
 						<div style={{ display: "flex", justifyContent: "center", paddingTop: 12 }}>
-							<Pagination count={pageCount} page={page} onChange={(_, v) => setPage(v)} color="primary" siblingCount={1} boundaryCount={1} showFirstButton showLastButton sx={{ "& .MuiPaginationItem-root": { color: "#fff" }, "& .Mui-selected": { background: "#7c3aed" } }} />
+							<Pagination count={pageCount} page={pageIdx} onChange={(_, v) => setPageIdx(v)} color="primary" siblingCount={1} boundaryCount={1} showFirstButton showLastButton sx={{ "& .MuiPaginationItem-root": { color: "#fff" }, "& .Mui-selected": { background: "#7c3aed" } }} />
 						</div>
 					)}
 				</div>
 
-				{/* Filter modal (centered panel matching the provided design) */}
-				<Dialog
+				<FilterModal
 					open={filterModalOpen}
 					onClose={closeFilter}
-					maxWidth="md"
-					fullWidth
-					BackdropProps={{ sx: { backdropFilter: "blur(6px)", backgroundColor: "rgba(0,0,0,0.45)" } }}
-					PaperProps={{
- 						sx: {
- 						// smaller, centered panel
- 						width: "min(820px, 92vw)",
- 						mx: "auto",
- 						bgcolor: "rgba(6,4,6,0.88)",
- 						color: "#fff",
- 						borderRadius: 3,
- 						overflow: "hidden",
- 						border: "1px solid rgba(139,40,255,0.36)",
- 						boxShadow: "0 12px 50px rgba(2,6,23,0.7), 0 0 30px rgba(139,40,255,0.06) inset",
- 					},
- 				}}
- 			>
- 				{/* Header with large title and close button */}
- 				<div style={{ padding: 24, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
- 					<strong style={{ fontSize: 34, letterSpacing: 1, fontWeight: 900 }}>FILTER</strong>
- 					<IconButton onClick={closeFilter} sx={{ color: "#fff" }}>
- 						<CloseIcon />
- 					</IconButton>
- 				</div>
+					region={region}
+					setRegion={setRegion}
+					tier={tier}
+					setTier={setTier}
+					selectedTraffic={selectedTraffic}
+					setSelectedTraffic={setSelectedTraffic}
+					selectedCarPacks={selectedCarPacks}
+					setSelectedCarPacks={setSelectedCarPacks}
+					selectedMaps={selectedMaps}
+					setSelectedMaps={setSelectedMaps}
+					showOffline={showOffline}
+					setShowOffline={setShowOffline}
+					REGIONS={REGIONS}
+					TIERS={TIERS}
+					TRAFFICS={TRAFFICS}
+					CARPACKS={CARPACKS}
+					MAPS={MAPS}
+					toggleSetValue={toggleSetValue}
+					clearFiltersInModal={clearFiltersInModal}
+					applyFilters={applyFilters}
+					tierLabel={tierLabel}
+				/>
 
- 				{/* Search bar */}
- 				<div style={{ padding: "0 24px 18px 24px" }}>
- 					<TextField
- 						variant="outlined"
- 						placeholder="Search Filters"
- 						fullWidth
- 						size="small"
- 						InputProps={{ sx: { background: "rgba(139,40,255,0.06)", color: "#fff", borderRadius: 1, border: "1px solid rgba(139,40,255,0.18)" } }}
- 					/>
- 				</div>
+				<JoinModal
+					open={joinModalOpen}
+					onClose={closeJoinModal}
+					joinInfo={joinInfo}
+					joinCountdown={joinCountdown}
+					joinInitialPercent={joinInitialRef.current > 0 ? (joinCountdown / joinInitialRef.current) * 100 : 0}
+					serverCounts={serverCounts}
+					tierLabel={tierLabel}
+					tierColor={tierColor}
+				/>
 
- 				<Divider sx={{ borderColor: "rgba(255,255,255,0.04)" }} />
-
- 				{/* Content grid (two columns where space allows) */}
- 				<DialogContent sx={{ px: 3, py: 2 }}>
- 					<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
- 						{/* Region (single-select buttons) */}
- 						<div style={{ padding: 14, borderRadius: 10, background: "rgba(139,40,255,0.06)", border: "1px solid rgba(139,40,255,0.22)", boxShadow: "0 8px 20px rgba(139,40,255,0.04)" }}>
- 							<div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Region</div>
- 							<FormGroup row>
- 								<Button size="small" variant={region === "All" ? "contained" : "outlined"} onClick={() => setRegion("All")} sx={{ mr: 1, mb: 1 }}>
- 									All
- 								</Button>
- 								{REGIONS.map((r) => (
- 									<Button key={r} size="small" variant={region === r ? "contained" : "outlined"} onClick={() => setRegion(r)} sx={{ mr: 1, mb: 1 }}>
- 										{r}
- 									</Button>
- 								))}
- 							</FormGroup>
- 						</div>
-
- 						{/* Traffic */}
- 						<div style={{ padding: 14, borderRadius: 10, background: "rgba(139,40,255,0.06)", border: "1px solid rgba(139,40,255,0.22)", boxShadow: "0 8px 20px rgba(139,40,255,0.04)" }}>
- 							<div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Traffic Density</div>
- 							<FormGroup>
- 								{TRAFFICS.map((t) => (
- 									<FormControlLabel key={t} control={<Checkbox checked={selectedTraffic.has(t)} onChange={() => toggleSetValue(selectedTraffic, t, setSelectedTraffic)} sx={{ color: "rgba(139,40,255,0.9)" }} />} label={t} />
- 								))}
- 							</FormGroup>
- 						</div>
-
- 						{/* Tier */}
- 						<div style={{ padding: 14, borderRadius: 10, background: "rgba(139,40,255,0.06)", border: "1px solid rgba(139,40,255,0.22)", boxShadow: "0 8px 20px rgba(139,40,255,0.04)" }}>
- 							<div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Tier</div>
- 							<FormGroup row>
- 								<Button size="small" variant={tier === "All" ? "contained" : "outlined"} onClick={() => setTier("All")} sx={{ mr: 1, mb: 1 }}>
- 									All
- 								</Button>
- 								{TIERS.map((t) => (
- 									<Button key={t} size="small" variant={tier === t ? "contained" : "outlined"} onClick={() => setTier(t)} sx={{ mr: 1, mb: 1 }}>
- 										{tierLabel(t)}
- 									</Button>
- 								))}
- 							</FormGroup>
- 						</div>
-
- 						{/* Car Packs */}
- 						<div style={{ padding: 14, borderRadius: 10, background: "rgba(139,40,255,0.06)", border: "1px solid rgba(139,40,255,0.22)", boxShadow: "0 8px 20px rgba(139,40,255,0.04)" }}>
- 							<div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Car Packs</div>
- 							<FormGroup>
- 								{CARPACKS.map((c) => (
- 									<FormControlLabel key={c} control={<Checkbox checked={selectedCarPacks.has(c)} onChange={() => toggleSetValue(selectedCarPacks, c, setSelectedCarPacks)} sx={{ color: "rgba(139,40,255,0.9)" }} />} label={c} />
- 								))}
- 							</FormGroup>
- 						</div>
-
- 						{/* Map (multi-select) — show checkboxes in two columns and span full modal width */}
- 						<div style={{ gridColumn: "1 / -1", padding: 14, borderRadius: 10, background: "rgba(139,40,255,0.06)", border: "1px solid rgba(139,40,255,0.22)", boxShadow: "0 8px 20px rgba(139,40,255,0.04)" }}>
- 							<div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Map</div>
- 							<FormGroup sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.5 }}>
- 								{MAPS.map((m) => (
- 									<FormControlLabel
- 										key={m}
- 										control={<Checkbox checked={selectedMaps.has(m)} onChange={() => toggleSetValue(selectedMaps, m, setSelectedMaps)} sx={{ color: "rgba(139,40,255,0.9)" }} />}
- 										label={m}
- 										sx={{ width: "100%", mr: 0, mb: 0.5 }}
- 									/>
- 								))}
- 							</FormGroup>
- 						</div>
- 					</div>
- 				</DialogContent>
-
- 				{/* Sticky-looking bottom action bar */}
- 				<DialogActions sx={{ p: 2, justifyContent: "space-between", borderTop: "1px solid rgba(255,255,255,0.04)", bgcolor: "rgba(0,0,0,0.6)" }}>
- 					<Button variant="outlined" onClick={clearFiltersInModal} sx={{ color: "#fff", borderColor: "rgba(255,255,255,0.08)" }}>
- 						CLEAR FILTER
- 					</Button>
- 					<Button variant="contained" onClick={applyFilters} sx={{ background: "#8b28ff" }}>
- 						APPLY
- 					</Button>
- 				</DialogActions>
- 			</Dialog>
-
-			{/* Join modal (improved layout, neon accents) */}
-			<Dialog
-				open={joinModalOpen}
-				onClose={closeJoinModal}
-				// wider breakpoint to reduce horizontal overflow
-				maxWidth="md"
-				fullWidth
-				PaperProps={{
-					sx: {
-						// responsive explicit width so it never forces page scrollbar
-						width: "min(900px, 94vw)",
-						bgcolor: "rgba(10,8,16,0.62)", // translucent for frosted effect
-						backdropFilter: "blur(8px) saturate(120%)",
-						color: "#fff",
-						px: 3,
-						pt: 2.5,
-						pb: 2,
-						borderRadius: 2,
-						border: "1px solid rgba(124,58,237,0.14)",
-						boxShadow: "0 10px 60px rgba(124,58,237,0.18)",
-					},
-				}}
-				BackdropProps={{ sx: { backgroundColor: "rgba(2,6,23,0.56)", backdropFilter: "blur(6px)" } }}
-				// keep dialog centered while allowing content to scroll internally
-				scroll="paper"
-			>
-				<DialogContent sx={{ py: 1.5, px: 2, maxHeight: "80vh", overflowY: "auto" }}>
-					<div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-						{/* thumbnail */}
-						<div style={{ minWidth: 136, display: "flex", alignItems: "center", justifyContent: "center" }}>
-							{joinInfo?.thumbnail ? (
-								<img src={joinInfo.thumbnail} alt={joinInfo.name} style={{ width: 136, height: 80, objectFit: "cover", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)" }} />
-							) : (
-								<div style={{ width: 136, height: 80, borderRadius: 10, background: "linear-gradient(90deg,#0f172a,#24123b)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800 }}>
-									No Image
-								</div>
-							)}
-						</div>
-
-						{/* details */}
-						<div style={{ flex: 1 }}>
-							<div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
-								<div style={{ minWidth: 0 }}>
-									<div style={{ fontSize: 18, fontWeight: 900, lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{joinInfo?.name ?? "Joining server"}</div>
-									<div style={{ marginTop: 8, display: "flex", gap: 12, alignItems: "center", color: "rgba(255,255,255,0.87)", fontSize: 13 }}>
-										<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><DirectionsCarIcon fontSize="small" /> <span style={{ fontWeight: 800 }}>{joinInfo?.carPack ?? "Default Pack"}</span></span>
-										<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><PublicIcon fontSize="small" /> <span style={{ fontWeight: 800 }}>{joinInfo?.region ?? "Unknown"}</span></span>
-									</div>
-								</div>
-
-								{joinInfo?.tier && (
-									<span
-										style={{
-											display: "inline-block",
-											padding: "6px 12px",
-											borderRadius: 999,
-											background: tierColor(joinInfo.tier),
-											color: "#fff",
-											fontWeight: 800,
-											fontSize: 13,
-										}}
-									>
-										{tierLabel(joinInfo.tier)}
-									</span>
-								)}
-							</div>
-
-							{/* divider & stats row */}
-							<hr style={{ border: 0, borderTop: "1px solid rgba(255,255,255,0.04)", margin: "12px 0" }} />
-
-							<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-								<div style={{ display: "flex", gap: 18, alignItems: "center", color: "rgba(255,255,255,0.9)", fontWeight: 800 }}>
-									<div style={{ display: "flex", alignItems: "center", gap: 8 }}><PeopleIcon fontSize="small" /> <span>{joinInfo?.id && serverCounts[joinInfo.id] ? `${serverCounts[joinInfo.id].players}/${serverCounts[joinInfo.id].maxPlayers}` : "N/A"}</span></div>
-									<div style={{ display: "flex", alignItems: "center", gap: 8 }}><MapIcon fontSize="small" /> <span style={{ opacity: 0.9 }}>{joinInfo?.region ?? "—"}</span></div>
-								</div>
-
-								{/* countdown large and readable */}
-								<div style={{ textAlign: "right", minWidth: 96 }}>
-									<div style={{ fontSize: 12, color: "rgba(255,255,255,0.75)" }}>Redirect in</div>
-									<div style={{ fontSize: 22, fontWeight: 900, color: "#f0e6ff", textShadow: "0 0 14px rgba(124,58,237,0.6)" }}>
-										{String(Math.floor(joinCountdown / 60)).padStart(2, "0")}:{String(joinCountdown % 60).padStart(2, "0")}
-									</div>
-								</div>
-							</div>
-
-							{/* progress bar */}
-							<div style={{ marginTop: 12, height: 8, background: "rgba(255,255,255,0.04)", borderRadius: 8, overflow: "hidden" }}>
-								<div
-									style={{
-										height: "100%",
-										width: `${(joinInitialRef.current > 0 ? (joinCountdown / joinInitialRef.current) * 100 : 0).toFixed(2)}%`,
-										background: "linear-gradient(90deg,#7c3aed,#d6b3ff)",
-										transition: "width 0.4s linear",
-									}}
-								/>
-							</div>
-						</div>
-					</div>
-
-					<div style={{ marginTop: 12, color: "rgba(255,255,255,0.68)", textAlign: "center", fontSize: 13 }}>
-						You will be taken to the server join page in a new tab. Click Open Now to proceed immediately or Cancel to abort.
-					</div>
-				</DialogContent>
-				<DialogActions sx={{ justifyContent: "center", gap: 1, pb: 2 }}>
-					<Button
-						variant="contained"
-						onClick={() => {
-							if (joinInfo?.url) window.open(joinInfo.url, "_blank", "noopener,noreferrer")
-							closeJoinModal()
-						}}
-						sx={{ color: "#fff", background: "linear-gradient(90deg,#9b6bff,#7c3aed)", boxShadow: "0 12px 40px rgba(124,58,237,0.22)", px: 3 }}
-					>
-						Open Now
-					</Button>
-					<Button variant="outlined" onClick={closeJoinModal} sx={{ color: "#fff", borderColor: "rgba(255,255,255,0.12)" }}>
-						Cancel
-					</Button>
-				</DialogActions>
-			</Dialog>
+				<OfflineModal open={offlineModalOpen} onClose={closeOfflineModal} name={offlineServerName} />
 			</div>
 		</React.Fragment>
-	)
+	);
+}
+
+// Smarter JSON shape parser across various server implementations
+const deriveCounts = (body: any, s: Server): { players: number; maxPlayers: number } | undefined => {
+	try {
+		// Normalize wrapper
+		const b = (typeof body === "number") ? { clients: body } : (body?.result ?? body?.data ?? body);
+
+		// AssettoServer /info shape (example):
+		// { cars: [...], clients: 0, maxclients: 10, ... }
+		if (typeof b?.clients === "number" && typeof b?.maxclients === "number") {
+			return { players: b.clients, maxPlayers: b.maxclients };
+		}
+
+		// Other common keys as fallback
+		const nums = (keys: string[]) => keys.find((k) => typeof b?.[k] === "number") as string | undefined;
+		const playersKey = nums(["clients","Clients","players","Players","currentPlayers","playersCount","playerCount","connected","DriverCount","drivercount","carCount"]);
+		const maxKey = nums(["maxclients","maxClients","maxPlayers","MaxPlayers","max","max_players","capacity","slots","max_slots","MaxClients"]);
+		const players = playersKey ? b[playersKey] : undefined;
+		const maxPlayers = maxKey ? b[maxKey] : (typeof s.maxPlayers === "number" ? s.maxPlayers : undefined);
+		if (typeof players === "number" && typeof maxPlayers === "number") {
+			return { players, maxPlayers };
+		}
+	} catch {
+		// ignore
+	}
+	return undefined;
+};
+
+async function fetchServerCount(
+	s: Server,
+	perRequestTimeout = 2500,
+	hint?: { base: string; path: string; protocol: "http" | "https" }
+): Promise<{ players: number; maxPlayers: number; chosen?: { base: string; path: string; protocol: "http" | "https" } } | undefined> {
+	const host = s.host || DEFAULT_IP;
+	const bases = [`http://${host}:${s.httpPort}`, `https://${host}:${s.httpPort}`];
+	// Try multiple common endpoints — keep /info first, then common fallbacks
+	const paths = [
+		"/info", "/INFO",
+		"/json", "/JSON", "/statusJSON",
+		"/status", "/players.json",
+		"/entrylist", "/api/entrylist", "/api/session", "/session",
+		"/players", "/clients",
+	];
+
+	// Build candidate list; if we have a working hint, try it first
+	const candidates: Array<{ base: string; path: string; protocol: "http" | "https" }> = [];
+	if (hint) candidates.push(hint);
+	for (const base of bases) {
+		for (const path of paths) {
+			const protocol = base.startsWith("https://") ? "https" : "http";
+			if (hint && hint.base === base && hint.path === path) continue; // already added
+			candidates.push({ base, path, protocol });
+		}
+	}
+
+	for (const cand of candidates) {
+		const { base, path, protocol } = cand;
+		const url = `${base}${path}`;
+		const isInfo = path.toLowerCase() === "/info";
+		const isHttps = protocol === "https";
+		const proxied = (tmo: number) => `/api/proxy?u=${encodeURIComponent(url)}&t=${tmo}&q=1`;
+		const attempts = isInfo ? 2 : 1;
+		for (let attempt = 0; attempt < attempts; attempt++) {
+			let tmo = isInfo
+				? (attempt === 0 ? Math.max(2000, perRequestTimeout) : Math.max(5000, perRequestTimeout * 2))
+				: perRequestTimeout;
+			// HTTPS can be slower — don't clamp too aggressively
+			if (isHttps) tmo = attempt === 0 ? Math.max(tmo, 3500) : Math.max(tmo, 6000);
+			if (isInfo && DEBUG_INFO) console.log(`[servers] /info try a=${attempt + 1}/${attempts} tmo=${tmo} url=${url}`);
+
+			try {
+				const res = await fetchWithTimeout(proxied(tmo), tmo + 1500);
+				if (!res.ok) {
+					if (isInfo && DEBUG_INFO) console.warn(`[servers] /info not ok status=${res.status} url=${url}`);
+					continue;
+				}
+				const ct = (res.headers.get("content-type") || "").toLowerCase();
+				let body: any = null;
+				if (ct.includes("application/json")) {
+					body = await res.json().catch(() => null);
+				} else {
+					const text = await res.text();
+					try {
+						body = JSON.parse(text);
+					} catch {
+						body = null;
+					}
+				}
+				if (body == null || (typeof body !== "object" && typeof body !== "number")) {
+					if (isInfo && DEBUG_INFO) console.warn(`[servers] /info invalid JSON url=${url}`);
+					continue;
+				}
+
+				const derived = deriveCounts(body, s);
+				if (derived) {
+					if (isInfo && DEBUG_INFO) console.log("[servers] /info derived", { url, ...derived });
+					return { ...derived, chosen: { base, path, protocol } };
+				}
+			} catch (err: any) {
+				if (isInfo && DEBUG_INFO) {
+					const msg = err?.name === "AbortError" ? "aborted(timeout)" : `err=${err?.name ?? ""} ${err?.message ?? String(err)}`;
+					console.warn(`[servers] /info ${msg} url=${url}`);
+				}
+			}
+		}
+	}
+	return undefined;
 }
