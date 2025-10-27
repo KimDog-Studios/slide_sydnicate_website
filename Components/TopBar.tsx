@@ -12,22 +12,10 @@ function TopBar() {
 
 	// Discord OAuth redirect
 	const handleDiscordLogin = () => {
-		const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || "";
-		const redirectUri =
-			process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI ||
-			(typeof window !== "undefined" ? `${window.location.origin}/api/auth/discord/callback` : "");
-		if (!clientId || !redirectUri) {
-			console.error("Missing Discord OAuth env");
-			return;
-		}
-		const params = new URLSearchParams({
-			client_id: clientId,
-			response_type: "code",
-			scope: "identify email",
-			redirect_uri: redirectUri,
-			prompt: "consent",
-		});
-		window.location.href = `https://discord.com/api/oauth2/authorize?${params.toString()}`;
+		// Use the exact URL (scopes/redirect) you provided
+		const AUTH_URL =
+			"https://discord.com/oauth2/authorize?client_id=1432271055304658967&response_type=code&redirect_uri=http%3A%2F%2Fslide-syndicate.com%2Fapi%2Fauth%2Fdiscord%2Fcallback&scope=identify+guilds+guilds.channels.read+role_connections.write+gdm.join+guilds.members.read+openid";
+		window.location.href = AUTH_URL;
 	};
 
 	const handleLogout = async () => {
