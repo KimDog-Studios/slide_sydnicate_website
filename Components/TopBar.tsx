@@ -10,15 +10,36 @@ function TopBar() {
 	const [menuOpen, setMenuOpen] = useState(false);
 	const userBoxRef = useRef<HTMLDivElement | null>(null);
 
+	// If Discord redirected to the site root with ?code=..., forward it to our callback API
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		const url = new URL(window.location.href);
+		const code = url.searchParams.get("code");
+		const discErr = url.searchParams.get("error");
+		if (code && !discErr) {
+			// preserve state if present
+			const state = url.searchParams.get("state");
+			const cb = `${window.location.origin}/api/auth/discord/callback?code=${encodeURIComponent(code)}${state ? `&state=${encodeURIComponent(state)}` : ""}`;
+			// Avoid double handling
+			window.location.replace(cb);
+		}
+	}, []);
+
 	// Discord OAuth redirect (build with canonical redirect_uri)
 	const handleDiscordLogin = () => {
 		const origin = typeof window !== "undefined" ? window.location.origin : "https://slide-syndicate.com";
+		const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || "";
 		const redirectUri = process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI || `${origin}/api/auth/discord/callback`;
+		const scopes = process.env.NEXT_PUBLIC_DISCORD_SCOPES || "identify guilds guilds.channels.read role_connections.write gdm.join guilds.members.read openid";
+		if (!clientId || !redirectUri) {
+			console.error("Discord OAuth env missing. Set NEXT_PUBLIC_DISCORD_CLIENT_ID and NEXT_PUBLIC_DISCORD_REDIRECT_URI");
+			return;
+		}
 		const params = new URLSearchParams({
-			client_id: "1432271055304658967",
+			client_id: clientId,
 			response_type: "code",
 			redirect_uri: redirectUri,
-			scope: "identify guilds guilds.channels.read role_connections.write gdm.join guilds.members.read openid",
+			scope: scopes,
 		});
 		window.location.href = `https://discord.com/oauth2/authorize?${params.toString()}`;
 	};
