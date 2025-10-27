@@ -7,20 +7,18 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
 	const url = new URL(req.url);
 	const code = url.searchParams.get("code");
-	if (!code) {
-		return NextResponse.redirect(new URL("/?error=missing_code", url));
-	}
+	if (!code) return NextResponse.redirect(new URL("/?error=missing_code", url));
 
 	const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || "";
 	const clientSecret = process.env.DISCORD_CLIENT_SECRET || "";
-	if (!clientId || !clientSecret) {
-		return NextResponse.redirect(new URL("/?error=server_config", url));
-	}
+	if (!clientId || !clientSecret) return NextResponse.redirect(new URL("/?error=server_config", url));
 
-	// Must exactly match the redirect_uri used in authorize step (same host)
-	const redirectUri = `${url.origin}/api/auth/discord/callback`;
+	// IMPORTANT: must match exactly what was used in authorize step
+	const configured = process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI;
+	const fallback = `${url.origin}/api/auth/discord/callback`;
+	const redirectUri = configured || fallback;
 
-	// Exchange code for token
+	// Exchange code
 	const body = new URLSearchParams({
 		client_id: clientId,
 		client_secret: clientSecret,
@@ -52,33 +50,23 @@ export async function GET(req: Request) {
 			cache: "no-store",
 		});
 		user = await uRes.json().catch(() => null);
-		if (!uRes.ok || !user?.id) {
-			return NextResponse.redirect(new URL("/?error=user_fetch", url));
-		}
+		if (!uRes.ok || !user?.id) return NextResponse.redirect(new URL("/?error=user_fetch", url));
 	} catch {
 		return NextResponse.redirect(new URL("/?error=user_fetch", url));
 	}
 
 	const displayName = user.global_name || user.username || "User";
-	const avatarUrl = user.avatar
-		? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128`
-		: null;
+	const avatarUrl = user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128` : null;
 
-	// Sign session and set cookie
-	const session = signSession({
-		id: String(user.id),
-		displayName,
-		avatar: avatarUrl,
-		ts: Date.now(),
-	});
-
+	// Set session cookie
+	const session = signSession({ id: String(user.id), displayName, avatar: avatarUrl, ts: Date.now() });
 	const res = NextResponse.redirect(new URL("/", url));
 	res.cookies.set(COOKIE_NAME, session, {
 		httpOnly: true,
 		secure: true,
 		sameSite: "lax",
 		path: "/",
-		maxAge: 60 * 60 * 24 * 7, // 7 days
+		maxAge: 60 * 60 * 24 * 7,
 	});
 	return res;
 }

@@ -10,10 +10,10 @@ function TopBar() {
 	const [menuOpen, setMenuOpen] = useState(false);
 	const userBoxRef = useRef<HTMLDivElement | null>(null);
 
-	// Discord OAuth redirect
+	// Discord OAuth redirect (build with canonical redirect_uri)
 	const handleDiscordLogin = () => {
-		const origin = typeof window !== "undefined" ? window.location.origin : "https://www.slide-syndicate.com";
-		const redirectUri = `${origin}/api/auth/discord/callback`;
+		const origin = typeof window !== "undefined" ? window.location.origin : "https://slide-syndicate.com";
+		const redirectUri = process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI || `${origin}/api/auth/discord/callback`;
 		const params = new URLSearchParams({
 			client_id: "1432271055304658967",
 			response_type: "code",
