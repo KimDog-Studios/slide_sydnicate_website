@@ -10,6 +10,8 @@ export type Server = {
 	thumbnail?: string
 	httpPort: number
 	carPack?: string
+	// optional per-server HTTP host (e.g. specific IP or hostname). If omitted, DEFAULT_IP is used.
+	host?: string
 }
 
 export const DEFAULT_IP = "45.141.36.126"

@@ -1,5 +1,6 @@
 "use client";
 import HomePage from "@/Components/HomePage";
+import Membership from "@/Components/Membership";
 import React from "react";
 
 export default function Home() {
@@ -33,6 +34,7 @@ export default function Home() {
       {/* Overlay content above the video */}
       <div style={{ position: "relative", zIndex: 10 }}>
         <HomePage />
+        <Membership />
       </div>
     </div>
   );
