@@ -14,7 +14,7 @@ function TopBar() {
 	const handleDiscordLogin = () => {
 		// Use the exact URL (scopes/redirect) you provided
 		const AUTH_URL =
-			"https://discord.com/oauth2/authorize?client_id=1432271055304658967&response_type=code&redirect_uri=http%3A%2F%2Fslide-syndicate.com%2Fapi%2Fauth%2Fdiscord%2Fcallback&scope=identify+guilds+guilds.channels.read+role_connections.write+gdm.join+guilds.members.read+openid";
+			"https://discord.com/oauth2/authorize?client_id=1432271055304658967&response_type=code&redirect_uri=https%3A%2F%2Fslide-syndicate.com%2Fapi%2Fauth%2Fdiscord%2Fcallback&scope=identify+guilds+guilds.channels.read+role_connections.write+gdm.join+guilds.members.read+openid";
 		window.location.href = AUTH_URL;
 	};
 
