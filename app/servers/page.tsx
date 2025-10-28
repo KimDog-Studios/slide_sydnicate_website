@@ -10,6 +10,7 @@ import OfflineModal from "./components/OfflineModal";
 import Toolbar from "./components/Toolbar";
 import CountdownSummary from "./components/CountdownSummary";
 import ServerRow from "./components/ServerRow";
+import ContactUs from "@/Components/ContactUs";
 
 type OrderKey = "name" | "tier" | "region" | "carPack" | "players" | "trafficDensity" | "map";
 type LiveCount = { players: number; maxPlayers: number; online: boolean };
@@ -583,6 +584,8 @@ export default function page() {
 				/>
 
 				<OfflineModal open={offlineModalOpen} onClose={closeOfflineModal} name={offlineServerName} />
+
+				<ContactUs />
 			</div>
 		</React.Fragment>
 	);

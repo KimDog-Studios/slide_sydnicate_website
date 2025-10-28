@@ -9,5 +9,17 @@ export async function GET() {
 	const token = (await cookies()).get(COOKIE_NAME)?.value || null;
 	const sess = verifySession(token);
 	if (!sess) return NextResponse.json({ authenticated: false }, { status: 200 });
-	return NextResponse.json({ authenticated: true, user: { id: sess.id, displayName: sess.displayName, avatar: sess.avatar } });
+	// Only return id, displayName, avatar (no tier)
+	return NextResponse.json(
+		{
+			authenticated: true,
+			user: {
+				id: String(sess.id),
+				displayName: String(sess.displayName),
+				avatar: sess.avatar ?? null,
+				tier: sess.tier ?? null,
+			},
+		},
+		{ status: 200 }
+	);
 }

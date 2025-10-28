@@ -60,7 +60,7 @@ function HomePage() {
 						</p>
 
 						<a
-							href="#join"
+							href="/get-started"
 							role="button"
 							aria-label="Get started with Drift Syndicate"
 							style={{

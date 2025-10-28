@@ -2,6 +2,7 @@
 import HomePage from "@/Components/HomePage";
 import Membership from "@/Components/Membership";
 import React from "react";
+import ContactUs from "@/Components/ContactUs";
 
 export default function Home() {
   // use the public video URL (place the file at public/videos/bg.mp4)
@@ -35,6 +36,7 @@ export default function Home() {
       <div style={{ position: "relative", zIndex: 10 }}>
         <HomePage />
         <Membership />
+        <ContactUs />
       </div>
     </div>
   );

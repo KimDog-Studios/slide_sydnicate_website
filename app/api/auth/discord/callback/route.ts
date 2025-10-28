@@ -13,10 +13,8 @@ export async function GET(req: Request) {
 	const clientSecret = process.env.DISCORD_CLIENT_SECRET || "";
 	if (!clientId || !clientSecret) return NextResponse.redirect(new URL("/?error=server_config", url));
 
-	// IMPORTANT: must match exactly what was used in authorize step
-	const configured = process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI;
-	const fallback = `${url.origin}/api/auth/discord/callback`;
-	const redirectUri = configured || fallback;
+	// Must match authorize redirect_uri exactly; your env points to site root
+	const redirectUri = process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI || `${url.origin}/`;
 
 	// Exchange code
 	const body = new URLSearchParams({
@@ -56,10 +54,19 @@ export async function GET(req: Request) {
 	}
 
 	const displayName = user.global_name || user.username || "User";
-	const avatarUrl = user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128` : null;
+	const avatarUrl = user.avatar
+		? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128`
+		: null;
 
-	// Set session cookie
-	const session = signSession({ id: String(user.id), displayName, avatar: avatarUrl, ts: Date.now() });
+	const session = signSession({
+		id: String(user.id),
+		displayName,
+		avatar: avatarUrl,
+		tier: "Beginner Access",
+		accessToken, // needed for guilds.join in REST mode
+		ts: Date.now(),
+	});
+
 	const res = NextResponse.redirect(new URL("/", url));
 	res.cookies.set(COOKIE_NAME, session, {
 		httpOnly: true,
