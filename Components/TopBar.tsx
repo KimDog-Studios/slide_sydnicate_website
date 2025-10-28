@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import MenuIcon from '@mui/icons-material/Menu'
 import StorageIcon from '@mui/icons-material/Storage'
+import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined'
 import LoginIcon from '@mui/icons-material/Login'
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined'
 import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined'
@@ -429,6 +430,22 @@ function TopBar() {
 					{/* Right: actions */}
 					<div className="shrink-0" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
 						<a
+							href="/downloads"
+							className="hidden sm:inline-flex items-center text-sm ss-btn-ghost"
+							style={{
+								...pill,
+								padding: '8px 10px',
+								color: '#f5f5ff',
+								textDecoration: 'none',
+								transition: 'transform 120ms ease',
+							}}
+							onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(-1px)'; }}
+							onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.transform = 'translateY(0)'; }}
+						>
+							<DownloadOutlinedIcon style={{ color: '#c4b5fd', filter: 'drop-shadow(0 0 10px #7c3aed)', marginRight: 6 }} fontSize="small" />
+							<span style={{ fontWeight: 700 }}>Downloads</span>
+						</a>
+						<a
 							href="/servers"
 							className="hidden sm:inline-flex items-center text-sm ss-btn-ghost"
 							style={{
@@ -646,6 +663,9 @@ function TopBar() {
 								Profile
 							</a>
 						)}
+						<a href="/downloads" onClick={() => setNavOpen(false)} style={{ color: '#fff', textDecoration: 'none', fontWeight: 700 }}>
+							Downloads
+						</a>
 						<a href="/servers" style={{ color: '#c4b5fd', textDecoration: 'none', fontWeight: 800, marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
 							<StorageIcon fontSize="small" /> Servers
 						</a>

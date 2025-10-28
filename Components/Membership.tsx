@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
 	Box,
 	Card,
@@ -80,7 +80,7 @@ const defaultFeatureStates: FeatureStateMap = featureCatalog.reduce<FeatureState
 	{} as FeatureStateMap
 );
 
-const tiers: Tier[] = [
+export const tiers: Tier[] = [
 	{
 		level: 0,
 		badge: "BEGINNER",
@@ -130,7 +130,8 @@ const tiers: Tier[] = [
 		level: 3,
 		badge: "PRO LINE",
 		name: "Pro Line",
-		price: { amount: "$10.99", cadence: "month" },
+		// keep label consistent with Stripe: $9.99 USD
+		price: { amount: "$9.99", cadence: "month" },
 		action: { label: "Subscribe", emphasis: "accent" },
 		highlight: false,
 		featureStates: {},
@@ -139,8 +140,8 @@ const tiers: Tier[] = [
 			tenPresets: "10 presets in custom servers",
 			allCars: "All cars in custom servers",
 		},
-		// Added pricing details
-		monthlyPrice: 10.99,
+		// pricing now matches Stripe: 9.99 USD monthly
+		monthlyPrice: 9.99,
 		annualDiscountPct: 20,
 	},
 ];
@@ -204,38 +205,29 @@ function Membership() {
 	const [subLevel, setSubLevel] = useState<number | null>(null);
 	const [subscribedLevels, setSubscribedLevels] = useState<number[]>([]);
 
+	// Checkout modal state
+	const [checkoutOpen, setCheckoutOpen] = useState(false);
+	const [checkoutLevel, setCheckoutLevel] = useState<number | null>(null);
+
+	// Coming soon modal
+	const [comingSoonOpen, setComingSoonOpen] = useState(false);
+
+	// Open / close helpers for the checkout confirmation modal
+	const openCheckout = (level: number) => {
+		setCheckoutLevel(level);
+		setCheckoutOpen(true);
+	};
+	const closeCheckout = () => {
+		setCheckoutOpen(false);
+		setCheckoutLevel(null);
+	};
+
 	const closeToast = () => setToast((t) => ({ ...t, open: false }));
 
 	// Detect a sensible default currency from the browser locale
 	React.useEffect(() => {
-		try {
-			const loc = (navigator?.language || "en-US").toLowerCase();
-			if (loc.endsWith("-gb")) setCurrency("GBP");
-			else if (loc.endsWith("-ca")) setCurrency("CAD");
-			else if (loc.endsWith("-au")) setCurrency("AUD");
-			else if (loc.endsWith("-jp")) setCurrency("JPY");
-			else if (loc.endsWith("-nz")) setCurrency("NZD");
-			else if (loc.endsWith("-ch")) setCurrency("CHF");
-			else if (loc.endsWith("-se")) setCurrency("SEK");
-			else if (loc.endsWith("-no")) setCurrency("NOK");
-			else if (loc.endsWith("-dk")) setCurrency("DKK");
-			else if (loc.endsWith("-in")) setCurrency("INR");
-			else if (loc.endsWith("-br")) setCurrency("BRL");
-			else if (loc.endsWith("-za")) setCurrency("ZAR");
-			else if (loc.endsWith("-mx")) setCurrency("MXN");
-			else if (loc.endsWith("-pl")) setCurrency("PLN");
-			else if (loc.endsWith("-cz")) setCurrency("CZK");
-			else if (loc.endsWith("-hu")) setCurrency("HUF");
-			else if (loc.endsWith("-tr")) setCurrency("TRY");
-			else if (loc.endsWith("-sg")) setCurrency("SGD");
-			else if (loc.endsWith("-hk")) setCurrency("HKD");
-			else if (loc.endsWith("-kr")) setCurrency("KRW");
-			else if (loc.endsWith("-cn")) setCurrency("CNY");
-			else if (/-be|-de|-es|-fr|-ie|-it|-nl|-pt|-fi|-at|-gr|-sk|-si|-lv|-lt|-ee|-lu/.test(loc)) setCurrency("EUR");
-			else setCurrency("USD");
-		} catch {
-			setCurrency("USD");
-		}
+		// Force USD because Stripe prices are configured only in USD
+		setCurrency("USD");
 	}, []);
 
 	// Load live FX rates with caching (exchangerate.host, base USD)
@@ -328,6 +320,41 @@ function Membership() {
 		} catch {}
 	}, []);
 
+	// Re-fetch subscription/membership info from the server/Discord and update local state.
+	// Used after admin grants or other actions to refresh UI immediately.
+	const refreshMembershipFromDiscord = useCallback(async () => {
+		try {
+			// Get current subscription status (levels + roles)
+			const r = await fetch("/api/auth/subscription-status", { credentials: "include", cache: "no-store" });
+			if (r.ok) {
+				const d = await r.json().catch(() => null);
+				if (Array.isArray(d?.levels)) {
+					const lvls = d.levels.map((n: any) => Number(n)).filter((n: any) => !Number.isNaN(n));
+					setSubscribedLevels(lvls);
+				}
+				// Admin from roles if configured
+				const rolesRaw: unknown = d?.roles ?? d?.roleIds ?? d?.role_ids;
+				if (Array.isArray(rolesRaw)) {
+					const roles = rolesRaw.map((x: any) => String(x));
+					if (adminRoleIdRef.current && roles.includes(adminRoleIdRef.current)) {
+						setIsAdmin(true);
+					}
+				}
+			}
+		} catch {
+			// ignore and continue
+		}
+
+		// Also pull a Discord snapshot (if server exposes it) and apply membership snapshot merging logic
+		try {
+			const m = await fetch("/api/discord/grant-role", { credentials: "include", cache: "no-store" });
+			const mj = m.ok ? await m.json().catch(() => null) : null;
+			if (mj) applyMembershipSnapshot(mj);
+		} catch {
+			// ignore
+		}
+	}, [applyMembershipSnapshot]);
+
 	// Fetch session data on mount
 	useEffect(() => {
 		(async () => {
@@ -352,6 +379,18 @@ function Membership() {
 			}
 		})();
 	}, []);
+
+	// Public admin fallback: if the current user matches NEXT_PUBLIC_ADMIN_DISCORD_ID, treat as admin
+	useEffect(() => {
+		try {
+			const pubAdmin = (process.env.NEXT_PUBLIC_ADMIN_DISCORD_ID || "").trim();
+			if (pubAdmin && me?.id && String(me.id) === pubAdmin) {
+				setIsAdmin(true);
+			}
+		} catch {
+			/* ignore */
+		}
+	}, [me]);
 
 	// Fetch which tier roles the user already has
 	useEffect(() => {
@@ -386,31 +425,58 @@ function Membership() {
 	}, [applyMembershipSnapshot]);
 
 	// Start checkout for a tier and redirect to payment page
-	const createCheckout = async (level: number) => {
+	const createCheckout = async (level: number, opts?: { billing?: "monthly" | "annually"; currency?: CurrencyCode }) => {
+		const billingChoice = opts?.billing ?? billing;
+		const currencyChoice = opts?.currency ?? currency;
 		try {
 			setSubLevel(level);
 			const res = await fetch("/api/checkout/create", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				credentials: "include",
-				body: JSON.stringify({ level }),
+				body: JSON.stringify({ level, billing: billingChoice, currency: currencyChoice }),
 			});
 			const j = await res.json().catch(() => null);
 			const url: string | undefined = j?.url || j?.checkoutUrl;
 			if (url) {
+				// redirect to Stripe (or provided) checkout
 				window.location.href = url;
 				return;
 			}
-			// Fallback: client-side route if API didn’t return a URL
-			window.location.href = `/checkout?level=${encodeURIComponent(level)}`;
-		} catch {
-			setToast({ open: true, msg: "Checkout failed. Try again.", sev: "error" });
+			// Fallback: client-side route if API didn’t return a URL — include billing & currency
+			window.location.href = `/checkout?level=${encodeURIComponent(level)}&billing=${encodeURIComponent(billingChoice)}&currency=${encodeURIComponent(currencyChoice)}`;
+		} catch (err: any) {
+			// If Stripe returns "No such price" we surface a clearer message for site admins
+			const rawMsg = String(err?.message || err || "Checkout failed");
+			if (rawMsg.includes("No such price") || rawMsg.includes("No such Price")) {
+				console.error("Stripe price error during checkout:", err);
+				setToast({
+					open: true,
+					msg: "Payment configuration error: missing Stripe price for the selected plan. Contact site admin to fix price mapping.",
+					sev: "error",
+				});
+			} else {
+				setToast({ open: true, msg: rawMsg, sev: "error" });
+			}
 			setSubLevel(null);
 		}
 	};
 
+	// Called from the modal confirm button
+	const doCheckout = async () => {
+		if (!checkoutLevel) return;
+		// Close UI quickly — createCheckout will navigate away on success
+		closeCheckout();
+		await createCheckout(checkoutLevel, { billing, currency });
+	};
+
 	// Gift handlers
 	const openGift = (level: number) => {
+		// Admin-only gift feature
+		if (!isAdmin) {
+			setToast({ open: true, msg: "Admins only", sev: "error" });
+			return;
+		}
 		setGiftOpenForLevel(level);
 		setGiftRecipientId(me?.id || "");
 		setGiftBusy(false);
@@ -425,6 +491,10 @@ function Membership() {
 
 	const doGift = async () => {
 		if (!giftOpenForLevel) return;
+		if (!isAdmin) {
+			setToast({ open: true, msg: "Admins only", sev: "error" });
+			return;
+		}
 		const level = giftOpenForLevel;
 		const targetUserId = (giftRecipientId || "").trim();
 		if (!targetUserId) {
@@ -433,42 +503,17 @@ function Membership() {
 		}
 		try {
 			setGiftBusy(true);
-			if (isAdmin) {
-				const res = await fetch("/api/admin/grant-role", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					credentials: "include",
-					body: JSON.stringify({ targetUserId, level }),
-				});
-				const data = await res.json().catch(() => ({}));
-				if (!res.ok) throw new Error(data?.error || "Grant failed");
-				setToast({ open: true, msg: `Granted tier ${level} to ${targetUserId}`, sev: "success" });
-				// Pull latest roles/levels so UI reflects immediately
-				await refreshMembershipFromDiscord();
-				closeGift();
-				return;
-			}
-			// Non-admin: create a free gift code the recipient can redeem
-			const res = await fetch("/api/gift/create", {
+			const res = await fetch("/api/admin/grant-role", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				credentials: "include",
 				body: JSON.stringify({ targetUserId, level }),
 			});
 			const data = await res.json().catch(() => ({}));
-			if (!res.ok || !data?.code) throw new Error(data?.error || "Gift creation failed");
-			const code: string = String(data.code);
-			setGiftCode(code);
-			// Auto copy + redirect
-			try {
-				await navigator.clipboard.writeText(code);
-				setToast({ open: true, msg: "Gift code copied. Redirecting to redeem…", sev: "success" });
-			} catch {
-				setToast({ open: true, msg: "Gift code ready. Could not auto-copy.", sev: "success" });
-			}
-			setTimeout(() => {
-				window.location.href = `/gift/redeem?code=${encodeURIComponent(code)}`;
-			}, 2500);
+			if (!res.ok) throw new Error(data?.error || "Grant failed");
+			setToast({ open: true, msg: `Granted tier ${level} to ${targetUserId}`, sev: "success" });
+			await refreshMembershipFromDiscord();
+			closeGift();
 		} catch (e: any) {
 			setToast({ open: true, msg: e?.message || "Gift error", sev: "error" });
 		} finally {
@@ -729,7 +774,7 @@ function Membership() {
 														"&.Mui-disabled": { bgcolor: "#ffffff", color: "#0b0b0b", opacity: 1, cursor: "default" },
 														...(tier.level === 0 ? { pointerEvents: "none", opacity: 0.6 } : {}),
 													}}
-													onClick={() => createCheckout(tier.level)}
+													onClick={() => setComingSoonOpen(true)}
 													disabled={tier.level === 0 || subLevel === tier.level || isSubscribedTier}
 												>
 													{subLevel === tier.level ? (
@@ -740,8 +785,8 @@ function Membership() {
 													) : isSubscribedTier ? "Subscribed" : "Subscribe"}
 												</Button>
 
-												{/* Secondary: Send as a Gift (always available for paid tiers) */}
-												{tier.level > 0 && (
+												{/* Secondary: Send as a Gift (admin only) */}
+												{isAdmin && tier.level > 0 && (
 													<Button
 														variant="text"
 														size="small"
@@ -867,7 +912,7 @@ function Membership() {
 													size="small"
 													variant="contained"
 													disableElevation
-													onClick={() => createCheckout(t.level)}
+													onClick={() => setComingSoonOpen(true)}
 													sx={{
 														bgcolor: "#fff",
 														color: "#0b0b0b",
@@ -882,16 +927,18 @@ function Membership() {
 													{subLevel === t.level ? "Redirecting..." : (isSubscribedTier ? "Subscribed" : "Subscribe")}
 												</Button>
 
-												{/* Gift always available for paid tiers */}
-												<Button
-													size="small"
-													variant="outlined"
-													startIcon={<CardGiftcardIcon fontSize="small" />}
-													onClick={() => openGift(t.level)}
-													sx={{ color: "#fff", borderColor: "rgba(255,255,255,0.28)" }}
-												>
-													Gift
-												</Button>
+												{/* Gift (admin only) */}
+												{isAdmin && (
+													<Button
+														size="small"
+														variant="outlined"
+														startIcon={<CardGiftcardIcon fontSize="small" />}
+														onClick={() => openGift(t.level)}
+														sx={{ color: "#fff", borderColor: "rgba(255,255,255,0.28)" }}
+													>
+														Gift
+													</Button>
+												)}
 											</Stack>
 										) : (
 											<Button size="small" variant="contained" disableElevation disabled sx={{ bgcolor: "#fff", color: "#0b0b0b", borderRadius: 9999, px: 2.5, py: 0.75, opacity: 0.6 }}>
@@ -938,7 +985,7 @@ function Membership() {
 								)}
 
 								{/* Rows */}
-								{section.rows.map((row, idx) => {
+								{section.rows.map((row: { label: string | number | bigint | boolean | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | Promise<string | number | bigint | boolean | React.ReactPortal | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | null | undefined> | null | undefined; type: string; key: string; values: any[]; }, idx: any) => {
 									return (
 										<React.Fragment key={`${section.title}-${idx}`}>
 											{/* Label cell */}
@@ -987,96 +1034,78 @@ function Membership() {
 					</Box>
 				</Box>
 				{/* end compare table */}
-				<Snackbar open={toast.open} autoHideDuration={4000} onClose={closeToast} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
-					<Alert onClose={closeToast} severity={toast.sev} variant="filled" sx={{ width: "100%" }}>
-						{toast.msg}
-					</Alert>
-				</Snackbar>
+				{/* Checkout Modal */}
+				<Dialog open={checkoutOpen} onClose={closeCheckout} fullWidth maxWidth="sm">
+					<DialogTitle sx={{ fontWeight: 900 }}>Confirm Subscription</DialogTitle>
+					<DialogContent dividers>
+						{checkoutLevel !== null && (
+							<Box>
+								<Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>
+									{tiers.find((t) => t.level === checkoutLevel)?.name}
+								</Typography>
+								<Typography variant="body2" sx={{ mb: 1 }}>
+									Billing: <strong>{billing}</strong> • Currency: <strong>{currency}</strong>
+								</Typography>
+								<Box sx={{ mb: 2 }}>
+									{(() => {
+										const t = tiers.find((x) => x.level === checkoutLevel)!;
+										const p = getPriceParts(t, billing, currency, fxRates);
+										return (
+											<>
+												<Typography variant="h6" sx={{ fontWeight: 900 }}>
+													{p.main} {p.cadence}
+												</Typography>
+												{p.sub && <Typography variant="caption">{p.sub}</Typography>}
+												{p.savePct && <Typography variant="caption" sx={{ display: "block" }}>Save {p.savePct}% with annual billing</Typography>}
+											</>
+										);
+									})()}
+								</Box>
+								<Typography variant="caption" sx={{ color: "rgba(255,255,255,0.85)" }}>
+									You will be redirected to our payment provider to complete the subscription.
+								</Typography>
+							</Box>
+						)}
+					</DialogContent>
+					<DialogActions sx={{ px: 2, py: 1.25 }}>
+						<Button onClick={closeCheckout} color="inherit" disabled={subLevel !== null}>Cancel</Button>
+						<Button onClick={doCheckout} variant="contained" disableElevation sx={{ fontWeight: 800, bgcolor: "#ffffff", color: "#0b0b0b" }} disabled={subLevel !== null}>
+							{subLevel !== null ? "Redirecting..." : "Proceed to Checkout"}
+						</Button>
+					</DialogActions>
+				</Dialog>
 
-				{/* Gift Modal */}
+				{/* Coming Soon Modal */}
+				<Dialog open={comingSoonOpen} onClose={() => setComingSoonOpen(false)} fullWidth maxWidth="xs">
+					<DialogTitle sx={{ fontWeight: 900 }}>Coming soon</DialogTitle>
+					<DialogContent dividers>
+						<Typography variant="body2">
+							Membership payments are coming soon. Thanks for your patience!
+						</Typography>
+					</DialogContent>
+					<DialogActions>
+						<Button onClick={() => setComingSoonOpen(false)} variant="contained" disableElevation sx={{ fontWeight: 800, bgcolor: "#ffffff", color: "#0b0b0b" }}>
+							OK
+						</Button>
+					</DialogActions>
+				</Dialog>
+
+				{/* Admin-only Gift Modal (compact) */}
 				<Dialog
 					open={!!giftOpenForLevel}
 					onClose={giftBusy ? undefined : closeGift}
 					fullWidth
 					maxWidth="sm"
-					PaperProps={{
-						sx: {
-							position: "relative",
-							overflow: "hidden",
-							color: "#ffffff",
-							borderRadius: 2,
-							border: "1px solid",
-							borderColor: typeof giftOpenForLevel === "number" ? tierOutline(giftOpenForLevel) : "rgba(255,255,255,0.16)",
-							backgroundColor: "#0b0b0b",
-							backgroundImage: typeof giftOpenForLevel === "number" ? tierCardGradient(giftOpenForLevel) : "none",
-							backgroundRepeat: "no-repeat",
-							backgroundSize: "cover",
-							backgroundBlendMode: "overlay",
-							boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
-						},
-					}}
 				>
-					<DialogTitle sx={{ borderBottom: "1px solid rgba(255,255,255,0.06)", fontWeight: 900 }}>
-						Send as a Gift
+					<DialogTitle sx={{ fontWeight: 900 }}>
+						Send as a Gift {typeof giftOpenForLevel === "number" ? `— Tier ${giftOpenForLevel}` : ""}
 					</DialogTitle>
-					<DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.06)" }}>
-						{typeof giftOpenForLevel === "number" && (
-							<Box sx={{ mb: 2 }}>
-								{/* Header row (badge + name + FREE) */}
-								<Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" sx={{ mb: 1 }}>
-									<Chip
-										size="small"
-										label={tiers.find(t => t.level === giftOpenForLevel)?.badge}
-										variant="outlined"
-										sx={{
-											color: "#ffffff",
-											borderColor: tierOutline(giftOpenForLevel),
-											backgroundImage: tierCardGradient(giftOpenForLevel),
-											backgroundColor: "transparent",
-											backgroundRepeat: "no-repeat",
-											backgroundSize: "200% 200%",
-											backdropFilter: "blur(2px)",
-										}}
-									/>
-									<Typography variant="h6" fontWeight={800} sx={{ color: "#fff" }}>
-										{tiers.find(t => t.level === giftOpenForLevel)?.name}
-									</Typography>
-									<Box sx={{ ml: "auto" }}>
-										<Typography variant="h5" fontWeight={900} sx={{ color: "#c4b5fd" }}>
-											FREE
-										</Typography>
-									</Box>
-								</Stack>
-								<Typography variant="caption" sx={{ color: "rgba(255,255,255,0.85)" }}>
-									This gift grants the same benefits as the paid plan.
-								</Typography>
-							</Box>
+					<DialogContent dividers>
+						{!isAdmin && (
+							<Alert severity="error" sx={{ mb: 2 }}>
+								Admins only
+							</Alert>
 						)}
-
-						{/* What you get */}
-						<Typography variant="subtitle2" sx={{ color: "#fff", fontWeight: 800, mb: 1 }}>
-							What they get
-						</Typography>
-						<List dense>
-							{sortedFeatureCatalog
-								.filter((feature) =>
-									feature.key === "previous"
-										? (typeof giftOpenForLevel === "number" ? giftOpenForLevel : -1) >= feature.minLevel
-										: feature.minLevel === (typeof giftOpenForLevel === "number" ? giftOpenForLevel : -1)
-								)
-								.map((feature) => (
-									<ListItem key={`gift-${feature.key}`} disableGutters sx={{ py: 0.5, "&:not(:first-of-type)": { borderTop: "1px solid rgba(255,255,255,0.06)" } }}>
-										<ListItemIcon sx={{ minWidth: 28 }}>
-											<CheckCircleOutlineIcon sx={{ color: "#ffffff" }} fontSize="small" />
-										</ListItemIcon>
-										<ListItemText primaryTypographyProps={{ variant: "body2", sx: { color: "#ffffff" } }} primary={feature.label} />
-									</ListItem>
-								))}
-						</List>
-
-						<Divider sx={{ my: 1.5, borderColor: "rgba(255,255,255,0.08)" }} />
-
-						{/* Recipient input */}
 						<TextField
 							label="Recipient Discord User ID"
 							value={giftRecipientId}
@@ -1085,90 +1114,72 @@ function Membership() {
 							fullWidth
 							InputLabelProps={{ shrink: true }}
 							placeholder="e.g. 325603721243262978"
-							sx={{
-								"& .MuiInputBase-input": { color: "#fff" },
-								"& .MuiInputLabel-root": { color: "rgba(255,255,255,0.8)" },
-								"& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.24)" },
-							}}
 						/>
-
-						{!!giftCode && (
-							<Stack spacing={0.75} sx={{ mt: 1 }}>
-								<Typography variant="caption" sx={{ color: "rgba(255,255,255,0.8)" }}>
-									Gift Code (keep this safe)
-								</Typography>
-								<Box
-									sx={{
-										display: "flex",
-										alignItems: "center",
-										justifyContent: "space-between",
-										gap: 1,
-										p: 1,
-										borderRadius: 1,
-										bgcolor: "rgba(255,255,255,0.04)",
-										border: "1px solid rgba(255,255,255,0.08)",
-										fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-										letterSpacing: 1,
-									}}
-								>
-									<Typography variant="body2" sx={{ color: "#fff", fontWeight: 900, wordBreak: "break-all" }}>
-										{giftCode}
-									</Typography>
-									<IconButton size="small" onClick={copyGiftCode} aria-label="Copy gift code" title="Copy gift code">
-										<ContentCopyIcon fontSize="inherit" />
-									</IconButton>
-								</Box>
-								<Typography variant="caption" sx={{ color: "rgba(255,255,255,0.75)" }}>
-									Share this code. Copy copies the full code to your clipboard.
-								</Typography>
-							</Stack>
-						)}
-
-						{!isAdmin ? (
-							<Typography variant="caption" sx={{ color: "rgba(255,255,255,0.85)", display: "block", mt: 1 }}>
-								Create a FREE gift code and share it with the recipient. They’ll log in and redeem it.
-							</Typography>
-						) : (
-							<Typography variant="caption" sx={{ color: "rgba(255,255,255,0.85)", display: "block", mt: 1 }}>
-								As admin, the gift is granted instantly to the entered Discord ID.
-							</Typography>
-						)}
 					</DialogContent>
-					<DialogActions sx={{ px: 2, py: 1.25 }}>
-						<Button onClick={closeGift} disabled={giftBusy} color="inherit">Close</Button>
+					<DialogActions>
+						<Button onClick={closeGift} disabled={giftBusy}>Close</Button>
 						<Button
 							onClick={doGift}
-							disabled={giftBusy || !giftRecipientId.trim()}
+							disabled={giftBusy || !giftRecipientId.trim() || !isAdmin}
 							variant="contained"
 							disableElevation
 							sx={{ fontWeight: 800, bgcolor: "#ffffff", color: "#0b0b0b", "&:hover": { bgcolor: "#f5f5f5" } }}
 						>
-							{giftBusy ? "Working..." : isAdmin ? "Grant Now" : (giftCode ? "Regenerate Code" : "Create Gift Code")}
+							{giftBusy ? "Processing..." : "Send Gift"}
 						</Button>
 					</DialogActions>
 				</Dialog>
+
+				<Snackbar
+					open={toast.open}
+					autoHideDuration={4000}
+					onClose={closeToast}
+					anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+				>
+					<Alert onClose={closeToast} severity={toast.sev} variant="filled" sx={{ width: "100%" }}>
+						{toast.msg}
+					</Alert>
+				</Snackbar>
 			</Box>
-		</section>
-	);
-}
-
-// Compare table row model
-type CompareRow =
-	| { type: "feature"; key: FeatureKey; label: string }
-	| { type: "bool"; label: string; values: boolean[] }
-	| { type: "text"; label: string; values: string[] }
-	| { type: "number"; label: string; values: number[] };
-
-// Build sections: reuse featureCatalog only (remove picture-specific rows)
-const compareSections: { title: string; rows: CompareRow[] }[] = [
+ 		</section>
+ 	);
+ }
+ 
+ // Compare table row model
+ // Define compareSections for the compare table
+ const compareSections = [
 	{
 		title: "Features",
-		rows: sortedFeatureCatalog.map((f) => ({ type: "feature", key: f.key, label: f.label } as const)),
+		rows: sortedFeatureCatalog.map((feature) => ({
+			label: feature.label,
+			type: "feature",
+			key: feature.key,
+			values: tiers.map((tier) => tier.level >= feature.minLevel),
+		})),
 	},
-];
+	{
+		title: "Custom Presets",
+		rows: [
+			{
+				label: "Custom Presets",
+				type: "text",
+				key: "customPresets",
+				values: tiers.map((tier) => tier.featureNotes?.customPresets || ""),
+			},
+			{
+				label: "10 Presets in Custom Servers",
+				type: "bool",
+				key: "tenPresets",
+				values: tiers.map((tier) => !!tier.featureNotes?.tenPresets),
+			},
+			{
+				label: "All Cars in Custom Servers",
+				type: "bool",
+				key: "allCars",
+				values: tiers.map((tier) => !!tier.featureNotes?.allCars),
+			},
+		],
+	},
+ ];
 
-export default Membership;
-
-function refreshMembershipFromDiscord() {
-  throw new Error("Function not implemented.");
-}
+ export default Membership;

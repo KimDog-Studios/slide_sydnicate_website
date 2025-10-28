@@ -1,57 +1,77 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import Stripe from "stripe";
-import { COOKIE_NAME, verifySession } from "../../auth/_lib/session";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+const STRIPE_KEY = process.env.STRIPE_SECRET_KEY || "";
+const stripe = STRIPE_KEY
+	? new Stripe(STRIPE_KEY, { apiVersion: "2025-09-30.clover" })
+	: null;
 
-const stripeKey = process.env.STRIPE_SECRET_KEY || "";
-const PRICE_1 = process.env.STRIPE_PRICE_TIER1_ID || "";
-const PRICE_2 = process.env.STRIPE_PRICE_TIER2_ID || "";
-const PRICE_3 = process.env.STRIPE_PRICE_TIER3_ID || "";
-const GUILD_ID = process.env.DISCORD_GUILD_ID || "";
+function baseUrlFromRequest(req: Request) {
+	// Prefer env; fallback to request origin
+	const envBase = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL;
+	if (envBase) return envBase.replace(/\/+$/, "");
+	const u = new URL(req.url);
+	return u.origin;
+}
 
-const priceForLevel = (level: number) => {
-	switch (level) {
-		case 1: return PRICE_1;
-		case 2: return PRICE_2;
-		case 3: return PRICE_3;
-		default: return "";
-	}
-};
+function env(name: string) {
+	const v = process.env[name];
+	return typeof v === "string" && v.trim() ? v.trim() : undefined;
+}
+
+function pickPriceId(level: number, billing: "monthly" | "annually") {
+	// Preferred names
+	const monthly: Record<number, string | undefined> = {
+		1: env("STRIPE_PRICE_TIER_1"),
+		2: env("STRIPE_PRICE_TIER_2"),
+		3: env("STRIPE_PRICE_TIER_3"),
+	};
+	const annual: Record<number, string | undefined> = {
+		1: env("STRIPE_PRICE_TIER_1_ANNUAL"),
+		2: env("STRIPE_PRICE_TIER_2_ANNUAL"),
+		3: env("STRIPE_PRICE_TIER_3_ANNUAL"),
+	};
+	// Legacy fallback if you had older names
+	const legacyMonthly: Record<number, string | undefined> = {
+		1: env("STRIPE_PRICE_TIER1_ID"),
+		2: env("STRIPE_PRICE_TIER2_ID"),
+		3: env("STRIPE_PRICE_TIER3_ID"),
+	};
+
+	if (billing === "annually" && annual[level]?.startsWith("price_")) return annual[level];
+	return monthly[level] || legacyMonthly[level];
+}
 
 export async function POST(req: Request) {
-	if (!stripeKey) return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
-	const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" as any });
-
-	const url = new URL(req.url);
-	const origin = url.origin;
-
-	const jar = cookies();
-	const token = (await jar).get(COOKIE_NAME)?.value || null;
-	const sess = verifySession(token);
-	if (!sess?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-	const body = await req.json().catch(() => null) as { level?: number } | null;
-	const level = typeof body?.level === "number" ? body.level! : NaN;
-	if (!(level >= 1 && level <= 3)) return NextResponse.json({ error: "Invalid tier" }, { status: 400 });
-
-	const priceId = priceForLevel(level);
-	if (!priceId) return NextResponse.json({ error: "Price not set" }, { status: 500 });
-
+	if (!stripe) {
+		return NextResponse.json({ error: "Stripe not configured. Set STRIPE_SECRET_KEY." }, { status: 500 });
+	}
 	try {
+		const body = await req.json().catch(() => ({}));
+		const level = Number(body?.level);
+		const billing: "monthly" | "annually" = body?.billing === "annually" ? "annually" : "monthly";
+		if (![1, 2, 3].includes(level)) {
+			return NextResponse.json({ error: "Invalid tier level." }, { status: 400 });
+		}
+		const priceId = pickPriceId(level, billing);
+		if (!priceId?.startsWith("price_")) {
+			return NextResponse.json(
+				{ error: "Missing Stripe price for this tier. Set STRIPE_PRICE_TIER_{LEVEL} to a price_... ID." },
+				{ status: 400 }
+			);
+		}
+		const base = baseUrlFromRequest(req);
 		const session = await stripe.checkout.sessions.create({
 			mode: "subscription",
 			line_items: [{ price: priceId, quantity: 1 }],
-			allow_promotion_codes: true,
-			client_reference_id: String(sess.id),
-			metadata: { level: String(level), userId: String(sess.id), guildId: GUILD_ID },
-			success_url: `${origin}/api/checkout/claim?session_id={CHECKOUT_SESSION_ID}`,
-			cancel_url: `${origin}/?canceled=1`,
+			success_url: `${base}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+			cancel_url: `${base}/checkout?level=${encodeURIComponent(level)}&billing=${encodeURIComponent(billing)}&currency=USD`,
+			// allow_promotion_codes: true,
+			// automatic_tax: { enabled: true },
 		});
-		return NextResponse.json({ url: session.url });
+		return NextResponse.json({ url: session.url }, { status: 200 });
 	} catch (e: any) {
+		console.error("Stripe checkout error:", e);
 		return NextResponse.json({ error: e?.message || "Stripe error" }, { status: 500 });
 	}
 }
