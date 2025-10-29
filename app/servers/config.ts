@@ -87,15 +87,79 @@ export const SERVERS: Server[] = [
 	{ id: "syndicate_simhq_perma_1", name: "Ebisu Minami", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu Minami", httpPort: 9010, carPack: "SimHQ", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Loading_Screens/163189863_1729626497216735_1524780481741060968_n.jpg" },
 	{ id: "syndicate_simhq_perma_2", name: "Ebisu Nishi Long Course", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu Nishi Long Course", httpPort: 9011, carPack: "SimHQ", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Loading_Screens/163189863_1729626497216735_1524780481741060968_n.jpg" },
 	{ id: "syndicate_simhq_perma_3", name: "Ebisu North Course", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu North Course", httpPort: 9012, carPack: "SimHQ", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Loading_Screens/163189863_1729626497216735_1524780481741060968_n.jpg" },
-	{ id: "syndicate_simhq_perma_4", name: "Ebisu School Course", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu School Course", httpPort: 9013, carPack: "SimHQ", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Loading_Screens/163189863_1729626497216735_1524780481741060968_n.jpg" }
-]
+	{ id: "syndicate_simhq_perma_4", name: "Ebisu School Course", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu School Course", httpPort: 9013, carPack: "SimHQ", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Loading_Screens/163189863_1729626497216735_1524780481741060968_n.jpg" },
 
-// ensure every server is marked as a non-traffic server
-for (const s of SERVERS) {
-	s.trafficDensity = "None"
-}
+	// GravyGarage — core drift set
+	{ id: "syndicate_gravy_0", name: "ADC Klutch Kickers", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "ADC Klutch Kickers", httpPort: 9029, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+	{ id: "syndicate_gravy_1", name: "Adam LZ Compound", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Adam LZ Compound", httpPort: 9030, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+	{ id: "syndicate_gravy_2", name: "Drift Playground", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Drift Playground", httpPort: 9031, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+	{ id: "syndicate_gravy_3", name: "Grange Motor Circuit", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Grange Motor Circuit", httpPort: 9032, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+	{ id: "syndicate_gravy_4", name: "Kunitomi Circuit", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Kunitomi Circuit", httpPort: 9033, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+	{ id: "syndicate_gravy_5", name: "OI Wharf", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "OI Wharf", httpPort: 9034, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+	{ id: "syndicate_gravy_6", name: "Owara", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Owara", httpPort: 9035, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+	{ id: "syndicate_gravy_7", name: "Shibuya Drift", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Shibuya Drift", httpPort: 9036, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
 
-// ensure every server uses the default thumbnail for now
-for (const s of SERVERS) {
-	s.thumbnail = "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/Default.jpg"
-}
+	// GravyGarage — ADC winter
+	{ id: "syndicate_gravy_adc_1", name: "ADC Klutch Kickers Winter", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "ADC Klutch Kickers Winter", httpPort: 9037, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+
+	// GravyGarage — CT set
+	{ id: "syndicate_gravy_ct_0", name: "Brooklyn Park", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Brooklyn Park", httpPort: 9038, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+	{ id: "syndicate_gravy_ct_1", name: "Brooklyn Park Remastered", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Brooklyn Park Remastered", httpPort: 9039, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+	{ id: "syndicate_gravy_ct_2", name: "Backwoods", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Backwoods", httpPort: 9040, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+	{ id: "syndicate_gravy_ct_3", name: "Fort 51", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Fort 51", httpPort: 9041, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+	{ id: "syndicate_gravy_ct_4", name: "Full Send Drift Park", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Full Send Drift Park", httpPort: 9042, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+	{ id: "syndicate_gravy_ct_5", name: "Minecraft World", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Minecraft World", httpPort: 9043, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+	{ id: "syndicate_gravy_ct_6", name: "Nexus City", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Nexus City", httpPort: 9044, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+	{ id: "syndicate_gravy_ct_7", name: "Steel Yard", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Steel Yard", httpPort: 9045, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+	{ id: "syndicate_gravy_ct_8", name: "Tamworth UK Streets", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Tamworth UK Streets", httpPort: 9046, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+	{ id: "syndicate_gravy_ct_9", name: "Total Drift Challenge", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Total Drift Challenge", httpPort: 9047, carPack: "GravyGarage", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/16771109507482.png" },
+
+	// WDTS — core drift set
+	{ id: "syndicate_wdts_0", name: "ADC Klutch Kickers", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "ADC Klutch Kickers", httpPort: 9056, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_1", name: "Adam LZ Compound", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Adam LZ Compound", httpPort: 9057, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_2", name: "Drift Playground", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Drift Playground", httpPort: 9058, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_3", name: "Grange Motor Circuit", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Grange Motor Circuit", httpPort: 9059, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_4", name: "Kunitomi Circuit", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Kunitomi Circuit", httpPort: 9060, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_5", name: "OI Wharf", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "OI Wharf", httpPort: 9061, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_6", name: "Owara", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Owara", httpPort: 9062, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_7", name: "Shibuya Drift", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Shibuya Drift", httpPort: 9063, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+
+	// WDTS — ADC winter
+	{ id: "syndicate_wdts_adc_1", name: "ADC Klutch Kickers Winter", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "ADC Klutch Kickers Winter", httpPort: 9064, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+
+	// WDTS — CT set
+	{ id: "syndicate_wdts_ct_0", name: "Brooklyn Park", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Brooklyn Park", httpPort: 9065, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_ct_1", name: "Brooklyn Park Remastered", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Brooklyn Park Remastered", httpPort: 9066, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_ct_2", name: "Backwoods", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Backwoods", httpPort: 9067, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_ct_3", name: "Fort 51", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Fort 51", httpPort: 9068, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_ct_4", name: "Full Send Drift Park", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Full Send Drift Park", httpPort: 9069, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_ct_5", name: "Minecraft World", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Minecraft World", httpPort: 9070, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_ct_6", name: "Nexus City", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Nexus City", httpPort: 9071, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_ct_7", name: "Steel Yard", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Steel Yard", httpPort: 9072, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_ct_8", name: "Tamworth UK Streets", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Tamworth UK Streets", httpPort: 9073, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_ct_9", name: "Total Drift Challenge", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Total Drift Challenge", httpPort: 9074, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+
+	// WDTS — CG set
+	{ id: "syndicate_wdts_cg_0", name: "CG Bashlands", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "CG Bashlands", httpPort: 9075, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_cg_1", name: "CG Sequoia Park", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "CG Sequoia Park", httpPort: 9076, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_cg_2", name: "CG Sunrise Drift V2", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "CG Sunrise Drift V2", httpPort: 9077, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+
+	// WDTS — Ebisu set
+	{ id: "syndicate_wdts_perma_0", name: "Ebisu Complex", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu Complex", httpPort: 9078, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_perma_1", name: "Ebisu Minami", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu Minami", httpPort: 9079, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_perma_2", name: "Ebisu Nishi Long Course", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu Nishi Long Course", httpPort: 9080, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_perma_3", name: "Ebisu North Course", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu North Course", httpPort: 9081, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" },
+	{ id: "syndicate_wdts_perma_4", name: "Ebisu School Course", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu School Course", httpPort: 9082, carPack: "WDTS", thumbnail: "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/wdtstreetpack11.jpg" }
+	];
+	
+	// ensure every server is marked as a non-traffic server
+	for (const s of SERVERS) {
+		s.trafficDensity = "None";
+	}
+	
+	// ensure every server uses the default thumbnail for now (only if not already set)
+	for (const s of SERVERS) {
+		if (!s.thumbnail) {
+			s.thumbnail = "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/Default.jpg";
+		}
+	}
