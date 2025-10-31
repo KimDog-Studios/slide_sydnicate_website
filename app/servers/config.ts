@@ -140,10 +140,10 @@ export const SERVERS: Server[] = [
 	{ id: "syndicate_wdts_25", name: "Tamworth UK Streets", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Tamworth UK Streets", httpPort: 9725, carPack: "WDTS", thumbnail: "..." },
 	{ id: "syndicate_wdts_26", name: "Total Drift Challenge", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Total Drift Challenge", httpPort: 9726, carPack: "WDTS", thumbnail: "..." },
 
-	{ id: "kimdog_hesi_1", name: "KimDog Hesi - SRP", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "SRP", httpPort: 9900, carPack: "KimDog Hesi", thumbnail: "..." },
-	{ id: "kimdog_hesi_2", name: "KimDog Hesi - SRP", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "High", map: "SRP", httpPort: 9901, carPack: "KimDog Hesi", thumbnail: "..." },
-	{ id: "kimdog_hesi_3", name: "KimDog Hesi - High Force", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "High Force", httpPort: 9902, carPack: "KimDog Hesi", thumbnail: "..." },
-	{ id: "kimdog_hesi_4", name: "KimDog Hesi - High Force", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "High", map: "High Force", httpPort: 9903, carPack: "KimDog Hesi", thumbnail: "..." },
+	{ id: "kimdog_hesi_1", name: "KimDog Hesi - SRP - Light", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "SRP", httpPort: 9900, carPack: "KimDog Hesi", thumbnail: "..." },
+	{ id: "kimdog_hesi_2", name: "KimDog Hesi - SRP - Heavy", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "High", map: "SRP", httpPort: 9901, carPack: "KimDog Hesi", thumbnail: "..." },
+	{ id: "kimdog_hesi_3", name: "KimDog Hesi - High Force - Light", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "High Force", httpPort: 9902, carPack: "KimDog Hesi", thumbnail: "..." },
+	{ id: "kimdog_hesi_4", name: "KimDog Hesi - High Force - Heavy", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "High", map: "High Force", httpPort: 9903, carPack: "KimDog Hesi", thumbnail: "..." },
 	];
 
 // set thumbnails for all KimDogStreet servers
