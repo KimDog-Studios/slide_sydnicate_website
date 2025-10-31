@@ -140,6 +140,7 @@ export const SERVERS: Server[] = [
 	{ id: "syndicate_wdts_25", name: "Tamworth UK Streets", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Tamworth UK Streets", httpPort: 9725, carPack: "WDTS", thumbnail: "..." },
 	{ id: "syndicate_wdts_26", name: "Total Drift Challenge", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Total Drift Challenge", httpPort: 9726, carPack: "WDTS", thumbnail: "..." },
 
+	{ id: "kimdog_hesi_1", name: "KimDog Hesi - SRP", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "SRP", httpPort: 9727, carPack: "KimDog Hesi", thumbnail: "..." },
 	];
 
 // set thumbnails for all KimDogStreet servers
@@ -169,6 +170,13 @@ const WDTS_THUMBNAIL = "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20C
 for (const s of SERVERS) {
 	if (s.carPack === "WDTS") {
 		s.thumbnail = WDTS_THUMBNAIL;
+	}
+}
+
+const KIMDOG_HESI_THUMBNAIL = "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/KimDogHesi.jpg";
+for (const s of SERVERS) {
+	if (s.carPack === "KimDog Hesi") {
+		s.thumbnail = KIMDOG_HESI_THUMBNAIL;
 	}
 }
 
