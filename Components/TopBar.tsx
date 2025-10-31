@@ -384,7 +384,7 @@ function TopBar() {
 					<ul className="hidden md:flex items-center gap-6 list-none m-0 p-0 text-sm" style={{ marginLeft: 'auto', marginRight: 'auto' }}>
 						<li>
 							<a
-								href="#about"
+								href="/about"
 								className={`ss-link${active === "about" ? " active" : ""}`}
 								aria-current={active === "about" ? "page" : undefined}
 								style={{ padding: '6px 4px' }}
@@ -395,7 +395,7 @@ function TopBar() {
 						</li>
 						<li>
 							<a
-								href="#partners"
+								href="/partners"
 								className={`ss-link${active === "partners" ? " active" : ""}`}
 								aria-current={active === "partners" ? "page" : undefined}
 								style={{ padding: '6px 4px' }}
@@ -406,7 +406,7 @@ function TopBar() {
 						</li>
 						<li>
 							<a
-								href="#contact"
+								href="/contact-us"
 								className={`ss-link${active === "contact" ? " active" : ""}`}
 								aria-current={active === "contact" ? "page" : undefined}
 								style={{ padding: '6px 4px' }}

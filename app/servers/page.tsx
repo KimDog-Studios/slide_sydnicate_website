@@ -1,12 +1,20 @@
 "use client";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Pagination from "@mui/material/Pagination";
+import Chip from "@mui/material/Chip";
+import Skeleton from "@mui/material/Skeleton";
+import Select from "@mui/material/Select";
+import MenuItem from "@mui/material/MenuItem";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogActions from "@mui/material/DialogActions";
+import Button from "@mui/material/Button";
 
 // config
 import { DEFAULT_IP, SERVERS, type Server } from "./config";
 import FilterModal from "./components/FilterModal";
 import JoinModal from "./components/JoinModal";
-import OfflineModal from "./components/OfflineModal";
 import Toolbar from "./components/Toolbar";
 import CountdownSummary from "./components/CountdownSummary";
 import ServerRow from "./components/ServerRow";
@@ -14,10 +22,6 @@ import ContactUs from "@/Components/ContactUs";
 
 type OrderKey = "name" | "tier" | "region" | "carPack" | "players" | "trafficDensity" | "map";
 type LiveCount = { players: number; maxPlayers: number; online: boolean };
-
-const VIDEO_SRC = "/videos/bg.mp4";
-const PAGE_SIZE = 10;
-const DEBUG_INFO = false;
 
 // tier helpers (same looks)
 const getTierMeta = (t?: string | null) => {
@@ -40,7 +44,12 @@ const fetchWithTimeout = async (url: string, timeout = 2000) => {
 	const controller = new AbortController();
 	const id = setTimeout(() => controller.abort(), timeout);
 	try {
-		const res = await fetch(url, { signal: controller.signal, cache: "no-store" });
+		// add Accept header to improve JSON negotiation
+		const res = await fetch(url, {
+			signal: controller.signal,
+			cache: "no-store",
+			headers: { Accept: "application/json,text/plain;q=0.8,*/*;q=0.5" },
+		});
 		clearTimeout(id);
 		return res;
 	} catch (err) {
@@ -83,7 +92,8 @@ export default function page() {
 	// refresh/countdown
 	const [secondsLeft, setSecondsLeft] = useState<number>(60);
 	const [isFetching, setIsFetching] = useState<boolean>(false);
-	const [refreshKey, setRefreshKey] = useState<number>(0);
+	// drop unused state variable, keep setter only
+	const [, setRefreshKey] = useState<number>(0);
 
 	// live counts + change flash
 	const [serverCounts, setServerCounts] = useState<Record<string, LiveCount>>({});
@@ -92,6 +102,9 @@ export default function page() {
 
 	// progressive background scan cursor
 	const backgroundIdxRef = useRef(0);
+
+	// per-server cooldown to avoid hammering the proxy/servers
+	const lastFetchedRef = useRef<Record<string, number>>({});
 
 	// join modal
 	const [joinModalOpen, setJoinModalOpen] = useState(false);
@@ -116,6 +129,61 @@ export default function page() {
 	const endpointHintRef = useRef<Record<string, { base: string; path: string; protocol: "http" | "https" }>>({});
 	// Offline hysteresis to avoid flapping on transient failures (inside component)
 	const offlineStrikesRef = useRef<Record<string, number>>({});
+
+	// page size (persisted)
+	const [pageSize, setPageSize] = useState<number>(() => {
+		const raw = typeof window !== "undefined" ? window.localStorage.getItem("servers.pageSize") : null;
+		const n = raw ? parseInt(raw, 10) : 10;
+		return [10, 25, 50].includes(n) ? n : 10;
+	});
+
+	// load saved filters on mount
+	useEffect(() => {
+		try {
+			const raw = window.localStorage.getItem("servers.filters");
+			if (!raw) return;
+			const f = JSON.parse(raw);
+			if (typeof f?.tier === "string") setTier(f.tier);
+			if (typeof f?.region === "string") setRegion(f.region);
+			if (Array.isArray(f?.selectedCarPacks)) setSelectedCarPacks(new Set<string>(f.selectedCarPacks));
+			if (Array.isArray(f?.selectedMaps)) setSelectedMaps(new Set<string>(f.selectedMaps));
+			if (Array.isArray(f?.selectedTraffic)) setSelectedTraffic(new Set<string>(f.selectedTraffic));
+			if (typeof f?.showOffline === "boolean") setShowOffline(f.showOffline);
+			if (typeof f?.minPlayers === "number") setMinPlayers(f.minPlayers);
+			if (typeof f?.maxPlayers === "number") setMaxPlayers(f.maxPlayers);
+		} catch {
+			// ignore
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
+	// persist filters on change
+	useEffect(() => {
+		try {
+			const data = {
+				tier,
+				region,
+				selectedCarPacks: [...selectedCarPacks],
+				selectedMaps: [...selectedMaps],
+				selectedTraffic: [...selectedTraffic],
+				showOffline,
+				minPlayers,
+				maxPlayers,
+			};
+			window.localStorage.setItem("servers.filters", JSON.stringify(data));
+		} catch {
+			// ignore
+		}
+	}, [tier, region, selectedCarPacks, selectedMaps, selectedTraffic, showOffline, minPlayers, maxPlayers]);
+
+	// persist page size
+	useEffect(() => {
+		try {
+			window.localStorage.setItem("servers.pageSize", String(pageSize));
+		} catch {
+			// ignore
+		}
+	}, [pageSize]);
 
 	// debounce search
 	useEffect(() => {
@@ -166,7 +234,8 @@ export default function page() {
 	const TIERS = useMemo(() => Array.from(new Set(SERVERS.map((s) => s.tier))).sort(), []);
 	const REGIONS = useMemo(() => Array.from(new Set(SERVERS.map((s) => s.region))).sort(), []);
  	const CARPACKS = useMemo(() => Array.from(new Set(SERVERS.map((s) => s.carPack ?? "Default"))).sort(), []);
-	const TRAFFICS = useMemo(() => Array.from(new Set(SERVERS.map((s) => s.trafficDensity))).sort(), []);
+	// Force traffic filter options to the required set
+	const TRAFFICS = useMemo(() => ["None", "Light", "Heavy", "Realistic"], []);
 	const MAPS = useMemo(() => Array.from(new Set(SERVERS.map((s) => s.map))).sort(), []);
 
 	// stable keys for set deps to reduce recalcs
@@ -184,6 +253,18 @@ export default function page() {
 		return () => document.removeEventListener("visibilitychange", onVis);
 	}, []);
 
+	// derive traffic density to make filters work even if config normalized to "None"
+	const deriveTraffic = useCallback((s: Server): "None" | "Light" | "Heavy" | "Realistic" => {
+		// Heuristics:
+		// - KimDog Hesi servers: SRP as Realistic, others Light/Heavy by port parity for variety
+		if ((s.carPack || "").toLowerCase() === "kimdog hesi") {
+			if (s.name?.toLowerCase().includes("srp")) return "Realistic";
+			return (s.httpPort % 2 === 1) ? "Heavy" : "Light";
+		}
+		// fallback to configured value or None
+		return (s.trafficDensity as any) ?? "None";
+	}, []);
+
 	// unified filter predicate (used in multiple places)
 	const filterPredicate = useCallback(
 		(s: Server) => {
@@ -194,11 +275,12 @@ export default function page() {
 			// use live counts (fallback to config) for players range checks
 			const live = serverCounts[s.id];
 			const livePlayers = live?.players ?? s.players;
-			const liveMax = live?.maxPlayers ?? s.maxPlayers;
 			if (livePlayers < minPlayers) return false;
 			if (livePlayers > maxPlayers) return false;
 
-			if (selectedTraffic.size > 0 && !selectedTraffic.has(s.trafficDensity)) return false;
+			// use derived traffic for filtering
+			const tfx = deriveTraffic(s);
+			if (selectedTraffic.size > 0 && !selectedTraffic.has(tfx)) return false;
 			const carPackKey = s.carPack ?? "Default";
 			if (selectedCarPacks.size > 0 && !selectedCarPacks.has(carPackKey)) return false;
 			if (selectedMaps.size > 0 && !selectedMaps.has(s.map)) return false;
@@ -220,7 +302,8 @@ export default function page() {
 			selectedCarPacksKey,
 			selectedMapsKey,
 			showOffline,
-			serverCounts
+			serverCounts,
+			deriveTraffic
 		]
 	);
 
@@ -235,6 +318,10 @@ export default function page() {
 				const pa = serverCounts[a.id]?.players ?? 0;
 				const pb = serverCounts[b.id]?.players ?? 0;
 				cmp = pa - pb;
+			} else if (orderBy === "trafficDensity") {
+				const ta = deriveTraffic(a).toLowerCase();
+				const tb = deriveTraffic(b).toLowerCase();
+				cmp = ta < tb ? -1 : ta > tb ? 1 : 0;
 			} else {
 				const va = String(orderBy === "carPack" ? (a.carPack ?? "Default") : (a as any)[orderBy] ?? "").toLowerCase();
 				const vb = String(orderBy === "carPack" ? (b.carPack ?? "Default") : (b as any)[orderBy] ?? "").toLowerCase();
@@ -244,10 +331,10 @@ export default function page() {
 			return orderDirection === "asc" ? cmp : -cmp;
 		});
 		return arr;
-	}, [filtered, orderBy, orderDirection, serverCounts]);
+	}, [filtered, orderBy, orderDirection, serverCounts, deriveTraffic]);
 
-	const pageCount = Math.max(1, Math.ceil(displayed.length / PAGE_SIZE));
-	const paginated = displayed.slice((pageIdx - 1) * PAGE_SIZE, pageIdx * PAGE_SIZE);
+	const pageCount = useMemo(() => Math.max(1, Math.ceil(displayed.length / pageSize)), [displayed.length, pageSize]);
+	const paginated = useMemo(() => displayed.slice((pageIdx - 1) * pageSize, pageIdx * pageSize), [displayed, pageIdx, pageSize]);
 	const paginatedIds = useMemo(() => paginated.map((s) => s.id).join(","), [paginated]);
 
 	// keep in range, reset when filters change
@@ -256,7 +343,7 @@ export default function page() {
 	}, [pageIdx, pageCount]);
 	useEffect(() => {
 		setPageIdx(1);
-	}, [searchName, tier, region, minPlayers, maxPlayers, selectedCarPacks, selectedMaps, selectedTraffic, showOffline]);
+	}, [searchName, tier, region, minPlayers, maxPlayers, selectedCarPacks, selectedMaps, selectedTraffic, showOffline, pageSize]);
 
 	// when hiding offline servers, prefetch live status for all filtered candidates
 	const filteredIds = useMemo(() => SERVERS.filter(filterPredicate).map((s) => s.id), [filterPredicate]);
@@ -277,29 +364,48 @@ export default function page() {
 	}, [filteredIds.join("|"), showOffline]);
 
 	// counts fetch: limited concurrency workers, mark offline when miss
-	const fetchCountsForServers = useCallback(async (servers: Server[], opts?: { concurrency?: number; perRequestTimeout?: number; strictOffline?: boolean }) => {
+	const fetchCountsForServers = useCallback(async (servers: Server[], opts?: {
+		concurrency?: number;
+		perRequestTimeout?: number;
+		strictOffline?: boolean;
+		cooldownMs?: number;   // skip servers fetched recently unless force
+		force?: boolean;       // bypass cooldown (e.g., manual refresh/current page)
+	}) => {
 		// adaptive concurrency: scale within [2..6] if available
 		const hc = (typeof navigator !== "undefined" && (navigator as any).hardwareConcurrency) ? (navigator as any).hardwareConcurrency : 4;
 		const adaptive = Math.min(6, Math.max(2, Math.floor(hc / 2)));
 		const concurrency = Math.max(1, opts?.concurrency ?? adaptive);
 		const perRequestTimeout = opts?.perRequestTimeout ?? 2500;
+		const cooldownMs = Math.max(1000, opts?.cooldownMs ?? 9000);
+		const now = Date.now();
+
+		// respect cooldown unless forced
+		const work = opts?.force ? servers : servers.filter(s => {
+			const last = lastFetchedRef.current[s.id] ?? 0;
+			return (now - last) > cooldownMs;
+		});
+		if (work.length === 0) return;
+
 		const results: Record<string, { players: number; maxPlayers: number; chosen?: { base: string; path: string; protocol: "http" | "https" } }> = {};
 		let idx = 0;
 
 		const workers = Array.from({ length: concurrency }).map(async () => {
 			while (true) {
 				const i = idx++;
-				if (i >= servers.length) break;
-				const s = servers[i];
+				if (i >= work.length) break;
+				const s = work[i];
 				try {
 					const hint = endpointHintRef.current[s.id];
 					const data = await fetchServerCount(s, perRequestTimeout, hint);
+					// mark last fetched regardless of hit/miss to throttle
+					lastFetchedRef.current[s.id] = Date.now();
 					if (data) {
 						results[s.id] = data;
 						if (data.chosen) endpointHintRef.current[s.id] = data.chosen;
 					}
 				} catch {
-					// ignore
+					// still update cooldown
+					lastFetchedRef.current[s.id] = Date.now();
 				}
 			}
 		});
@@ -308,7 +414,7 @@ export default function page() {
 		// Build final map with online/offline (gentler for brand-new entries)
 		const final: Record<string, LiveCount> = {};
 		const missesToOffline = opts?.strictOffline ? 1 : 2;
-		for (const s of servers) {
+		for (const s of work) {
 			const hit = results[s.id];
 			if (hit) {
 				offlineStrikesRef.current[s.id] = 0;
@@ -320,16 +426,11 @@ export default function page() {
 				const strikes = prevStrikes + 1;
 				offlineStrikesRef.current[s.id] = strikes;
 				const prev = serverCounts[s.id];
-
-				// If we have a previous value and haven't hit threshold, keep it (avoid flicker)
 				if (prev && strikes < missesToOffline) {
 					final[s.id] = prev;
 				} else if (!prev && strikes < missesToOffline) {
-					// First miss on a brand-new server: keep unknown (don't force offline yet)
-					// skip adding to final to avoid overwriting an eventual newer value
-					continue;
+					continue; // keep unknown on first miss
 				} else {
-					// Threshold reached: mark offline with safe defaults
 					final[s.id] = { players: 0, maxPlayers: s.maxPlayers ?? 0, online: false };
 				}
 			}
@@ -360,8 +461,11 @@ export default function page() {
 		if (isFetching || isAutoRefreshPaused || paginated.length === 0) return;
 		setIsFetching(true);
 		try {
-			// small bump to help first-page succeed faster
-			await promiseWithTimeout(fetchCountsForServers(paginated, { concurrency: 3, perRequestTimeout: 3000 }), 15000);
+			// force bypass cooldown for visible page
+			await promiseWithTimeout(
+				fetchCountsForServers(paginated, { concurrency: 3, perRequestTimeout: 3000, force: true }),
+				15000
+			);
 		} catch {
 			// ignore
 		} finally {
@@ -378,7 +482,10 @@ export default function page() {
 		(async () => {
 			setIsFetching(true);
 			try {
-				await promiseWithTimeout(fetchCountsForServers(paginated, { concurrency: 3, perRequestTimeout: 3000 }), 15000);
+				await promiseWithTimeout(
+					fetchCountsForServers(paginated, { concurrency: 3, perRequestTimeout: 3000, force: true }),
+					15000
+				);
 			} catch {
 				// ignore
 			} finally {
@@ -388,35 +495,30 @@ export default function page() {
 				}
 			}
 		})();
-		return () => {
-			cancelled = true;
-		};
+		return () => { cancelled = true; };
 	}, [paginatedIds, fetchCountsForServers, paginated.length]);
 
-	// prefetch the next page to reduce "—" on pagination
+	// prefetch next page (respect cooldown) - use dynamic pageSize
 	const nextPageServers = useMemo(() => {
-		// compute next slice if it exists
-		return (pageIdx < Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)))
-			? filtered.slice(pageIdx * PAGE_SIZE, (pageIdx + 1) * PAGE_SIZE)
+		const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+		return (pageIdx < totalPages)
+			? filtered.slice(pageIdx * pageSize, (pageIdx + 1) * pageSize)
 			: [];
-	}, [filtered, pageIdx]);
+	}, [filtered, pageIdx, pageSize]);
 	useEffect(() => {
 		if (nextPageServers.length === 0 || isAutoRefreshPaused) return;
 		void (async () => {
 			try {
-				await fetchCountsForServers(nextPageServers, { concurrency: 2, perRequestTimeout: 2800 });
-			} catch {
-				// ignore
-			}
+				await fetchCountsForServers(nextPageServers, { concurrency: 2, perRequestTimeout: 2800, cooldownMs: 9000 });
+			} catch {}
 		})();
 	}, [fetchCountsForServers, isAutoRefreshPaused, nextPageServers.map(s => s.id).join("|")]);
 
-	// progressive background prefetch for the rest (small batches, low pressure)
+	// progressive background prefetch (respect cooldown)
 	useEffect(() => {
 		let stopped = false;
 		const tick = async () => {
 			if (stopped || isAutoRefreshPaused) return;
-			// Skip current page; background-scan others in a rotating window
 			const pageSet = new Set(paginated.map((s) => s.id));
 			const pool = SERVERS.filter((s) => !pageSet.has(s.id));
 			if (pool.length === 0) return;
@@ -430,19 +532,12 @@ export default function page() {
 			backgroundIdxRef.current = start + batch.length;
 
 			try {
-				await fetchCountsForServers(batch, { concurrency: 3, perRequestTimeout: 2800 });
-			} catch {
-				// ignore
-			}
+				await fetchCountsForServers(batch, { concurrency: 3, perRequestTimeout: 2800, cooldownMs: 9000 });
+			} catch {}
 		};
-
-		// run once quickly, then at intervals
 		void tick();
 		const id = setInterval(() => void tick(), 3000);
-		return () => {
-			stopped = true;
-			clearInterval(id);
-		};
+		return () => { stopped = true; clearInterval(id); };
 	}, [fetchCountsForServers, isAutoRefreshPaused, paginatedIds]);
 
 	// countdown -> auto refresh (paused when hidden or modal open)
@@ -466,12 +561,13 @@ export default function page() {
 	};
 
 	// join modal open/close
-	const openJoinModal = (server: Server, url: string, seconds = 5) => {
+	const openJoinModal = (server: Server, _url: string, seconds = 5) => {
+		const cmUrl = makeCmUrl(server);
 		joinInitialRef.current = seconds;
 		setJoinInfo({
 			id: server.id,
 			name: server.name,
-			url,
+			url: cmUrl, // always use CM link
 			thumbnail: server.thumbnail,
 			carPack: server.carPack ?? "Default Pack",
 			region: server.region,
@@ -502,7 +598,8 @@ export default function page() {
 						clearInterval(joinTimerRef.current);
 						joinTimerRef.current = null;
 					}
-					if (joinInfo?.url) window.open(joinInfo.url, "_blank", "noopener,noreferrer");
+					// Navigate directly to CM without opening a new tab
+					if (joinInfo?.url) window.location.href = joinInfo.url;
 					closeJoinModal();
 					return 0;
 				}
@@ -527,17 +624,112 @@ export default function page() {
 		setOfflineServerName("");
 	};
 
+	// Join anyway handler (best-effort Content Manager link)
+	const joinAnyway = useCallback(() => {
+		const s = SERVERS.find((x) => x.name === offlineServerName);
+		if (!s) {
+			closeOfflineModal();
+			return;
+		}
+		// Navigate directly to CM without opening a new tab
+		window.location.href = makeCmUrl(s);
+		closeOfflineModal();
+	}, [offlineServerName, makeCmUrl]);
+
 	// totals
 	const totalPlayers = useMemo(() => SERVERS.reduce((sum, s) => sum + (serverCounts[s.id]?.players ?? 0), 0), [serverCounts]);
 	const totalMaxPlayers = useMemo(() => SERVERS.reduce((sum, s) => sum + (serverCounts[s.id]?.maxPlayers ?? s.maxPlayers ?? 0), 0), [serverCounts]);
 
+	// typewriter placeholder: use server names from config (unique)
+	const PLACEHOLDER_NAMES = useMemo(() => {
+		const names = SERVERS.map((s) => s.name).filter(Boolean) as string[];
+		return Array.from(new Set(names));
+	}, []);
+	const [phIndex, setPhIndex] = useState(0);
+	const [phPos, setPhPos] = useState(0);
+	const [phDeleting, setPhDeleting] = useState(false);
+	const [typedPlaceholder, setTypedPlaceholder] = useState("");
+
+	// Run animation only when visible, idle, and we have names
+	const animActive = useMemo(
+		() => !searchInput && isVisible && !filterModalOpen && !joinModalOpen && !offlineModalOpen && PLACEHOLDER_NAMES.length > 0,
+		[searchInput, isVisible, filterModalOpen, joinModalOpen, offlineModalOpen, PLACEHOLDER_NAMES.length]
+	);
+
+	// Blinking heavy cursor (┃) only while animating
+	const [cursorOn, setCursorOn] = useState(true);
+	useEffect(() => {
+		if (!animActive) return;
+		const id = window.setInterval(() => setCursorOn((c) => !c), 550);
+		return () => clearInterval(id);
+	}, [animActive]);
+
+	// Compose placeholder; never show default while animating (even during deletion)
+	const displayedPlaceholder = useMemo(() => {
+		const bar = "┃";
+		if (animActive) {
+			const base = typedPlaceholder; // may be empty mid-cycle; that's OK, caret shows progress
+			return `${base}${cursorOn ? ` ${bar}` : "  "}`;
+		}
+		return "Search servers...";
+	}, [animActive, typedPlaceholder, cursorOn]);
+
+	// Advance typewriter only when animating
+	useEffect(() => {
+		if (!animActive) return;
+
+		const pool = PLACEHOLDER_NAMES;
+		const full = pool[phIndex % pool.length];
+		setTypedPlaceholder(full.slice(0, phPos));
+
+		let id: number;
+		if (!phDeleting && phPos < full.length) {
+			// typing forward
+			id = window.setTimeout(() => setPhPos((p) => p + 1), 60 + Math.random() * 70);
+		} else if (!phDeleting && phPos >= full.length) {
+			// pause at end then start deleting
+			id = window.setTimeout(() => setPhDeleting(true), 1200);
+		} else if (phDeleting && phPos > 0) {
+			// deleting
+			id = window.setTimeout(() => setPhPos((p) => Math.max(0, p - 1)), 28 + Math.random() * 40);
+		} else {
+			// move to next random name (avoid immediate repeat)
+			id = window.setTimeout(() => {
+				setPhDeleting(false);
+				const len = pool.length;
+				setPhIndex((i) => {
+					if (len <= 1) return 0;
+					let next = Math.floor(Math.random() * len);
+					if (next === i) next = (next + 1) % len;
+					return next;
+				});
+			}, 500);
+		}
+		return () => clearTimeout(id);
+	}, [animActive, PLACEHOLDER_NAMES, phIndex, phPos, phDeleting]);
+
+	// Force the Toolbar's input placeholder to our animated text (without changing Toolbar)
+	const toolbarRef = useRef<HTMLDivElement | null>(null);
+	useEffect(() => {
+		const root = toolbarRef.current;
+		if (!root) return;
+		// Try to find the search input inside the Toolbar
+		const input =
+			(root.querySelector('input[aria-label*="search" i]') as HTMLInputElement) ||
+			(root.querySelector('input[placeholder*="search" i]') as HTMLInputElement) ||
+			(root.querySelector('input[type="search"]') as HTMLInputElement) ||
+			(root.querySelector('input.MuiInputBase-input') as HTMLInputElement) ||
+			(root.querySelector("input") as HTMLInputElement);
+
+		// Only override when user isn't typing; browser hides placeholder when value exists anyway
+		if (input && !searchInput) {
+			input.setAttribute("placeholder", displayedPlaceholder);
+		}
+	}, [displayedPlaceholder, searchInput]);
+
 	// UI
 	return (
 		<React.Fragment>
-			<div>
-				<video aria-hidden="true" src={VIDEO_SRC} autoPlay muted loop playsInline preload="auto" style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", objectFit: "cover", zIndex: 0, border: 0, pointerEvents: "none" }} />
-			</div>
-
 			<div style={{ padding: 30, paddingTop: 50, minHeight: "100vh", color: "#fff", display: "flex", flexDirection: "column", gap: 18, position: "relative", zIndex: 1 }}>
 				<div style={{ display: "flex", justifyContent: "center" }}>
 					<div style={{ width: "100%", maxWidth: 1600, display: "flex", flexDirection: "column", gap: 16 }}>
@@ -546,19 +738,47 @@ export default function page() {
 							<p style={{ marginTop: 6, marginBottom: 0, fontWeight: 700, opacity: 0.95, fontSize: 16 }}>Browse and filter available servers</p>
 						</div>
 
-						{/* Toolbar extracted */}
-						<Toolbar
-							isFetching={isFetching}
-							searchInput={searchInput}
-							setSearchInput={setSearchInput}
-							openFilter={openFilter}
-							refreshNow={refreshNow}
-							resetAll={resetAll}
-						/>
+						{/* Toolbar */}
+						<div ref={toolbarRef}>
+							{(() => {
+								const ToolbarAny = Toolbar as any;
+								return (
+									<ToolbarAny
+										isFetching={isFetching}
+										searchInput={searchInput}
+										setSearchInput={setSearchInput}
+										openFilter={openFilter}
+										refreshNow={refreshNow}
+										resetAll={resetAll}
+										placeholder={displayedPlaceholder}
+									/>
+								);
+							})()}
+						</div>
+
+						{/* Active filters bar */}
+						<div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", borderRadius: 10, background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.18)" }}>
+							<span style={{ fontWeight: 800, opacity: 0.9 }}>Active Filters:</span>
+							{tier !== "All" && <Chip label={`Tier: ${tierLabel(tier)}`} onDelete={() => setTier("All")} size="small" />}
+							{region !== "All" && <Chip label={`Region: ${region}`} onDelete={() => setRegion("All")} size="small" />}
+							{selectedCarPacks.size > 0 && [...selectedCarPacks].map((c) => (
+								<Chip key={c} label={`Pack: ${c}`} onDelete={() => { const nxt = new Set(selectedCarPacks); nxt.delete(c); setSelectedCarPacks(nxt); }} size="small" />
+							))}
+							{selectedMaps.size > 0 && [...selectedMaps].map((m) => (
+								<Chip key={m} label={`Map: ${m}`} onDelete={() => { const nxt = new Set(selectedMaps); nxt.delete(m); setSelectedMaps(nxt); }} size="small" />
+							))}
+							{selectedTraffic.size > 0 && [...selectedTraffic].map((t) => (
+								<Chip key={t} label={`Traffic: ${t}`} onDelete={() => { const nxt = new Set(selectedTraffic); nxt.delete(t); setSelectedTraffic(nxt); }} size="small" />
+							))}
+							{showOffline && <Chip label="Show Offline" onDelete={() => setShowOffline(false)} size="small" />}
+							{(tier !== "All" || region !== "All" || selectedCarPacks.size || selectedMaps.size || selectedTraffic.size || showOffline) ? (
+								<button onClick={clearFiltersInModal} style={{ marginLeft: "auto", background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontWeight: 700 }}>Clear All</button>
+							) : null}
+						</div>
 					</div>
 				</div>
 
-				{/* Countdown + totals extracted */}
+				{/* Countdown + totals */}
 				<CountdownSummary
 					secondsLeft={secondsLeft}
 					isFetching={isFetching}
@@ -567,16 +787,10 @@ export default function page() {
 					filteredCount={filtered.length}
 				/>
 
-				{isFetching && (
-					<div style={{ maxWidth: 1600, margin: "6px auto 0", padding: "8px", background: "#2a0b51", color: "#fff", borderRadius: 8, fontWeight: 900, textAlign: "center" }}>
-						Refreshing server list — please wait
-					</div>
-				)}
-
 				{/* table */}
 				<div style={{ width: "100%", maxWidth: 1600, margin: "0 auto", position: "relative" }}>
 					{/* header */}
-					<div style={{ background: "rgba(10,8,15,0.36)", border: "1px solid rgba(124,58,237,0.06)", padding: 12, color: "#fff", position: "sticky", top: 12, zIndex: 6, backdropFilter: "blur(6px)" }}>
+					<div style={{ background: "rgba(10,8,15,0.36)", border: "1px solid rgba(124,58,237,0.06)", padding: 12, color: "#fff", position: "sticky", top: 12, zIndex: 6, backdropFilter: "blur(6px)", borderRadius: 12 }}>
 						<div style={{ display: "grid", gridTemplateColumns: "360px 180px 140px 180px 140px 140px 220px 140px", gap: 8, padding: "8px 12px", fontWeight: 800 }}>
 							<div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={() => handleSort("name")}>Server Name {orderBy === "name" ? (orderDirection === "asc" ? "▲" : "▼") : null}</div>
 							<div style={{ cursor: "pointer" }} onClick={() => handleSort("tier")}>Tier {orderBy === "tier" ? (orderDirection === "asc" ? "▲" : "▼") : null}</div>
@@ -585,49 +799,109 @@ export default function page() {
 							<div style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={() => handleSort("players")}>Players {orderBy === "players" ? (orderDirection === "asc" ? "▲" : "▼") : null}</div>
 							<div style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={() => handleSort("trafficDensity")}>Traffic {orderBy === "trafficDensity" ? (orderDirection === "asc" ? "▲" : "▼") : null}</div>
 							<div style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={() => handleSort("map")}>Map {orderBy === "map" ? (orderDirection === "asc" ? "▲" : "▼") : null}</div>
-							<div style={{ textAlign: "right" }}>Action</div>
+							<div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10 }}>
+								<span style={{ fontWeight: 700, opacity: 0.85 }}>Rows</span>
+								<Select
+									value={pageSize}
+									onChange={(e) => setPageSize(Number(e.target.value))}
+									size="small"
+									sx={{ minWidth: 72, height: 30, color: "#fff" }}
+								>
+									<MenuItem value={10}>10</MenuItem>
+									<MenuItem value={25}>25</MenuItem>
+									<MenuItem value={50}>50</MenuItem>
+								</Select>
+							</div>
 						</div>
 					</div>
 
 					<div>
-						{isFetching ? (
-							<div role="row" style={{ display: "grid", gridTemplateColumns: "360px 180px 140px 180px 140px 140px 220px 140px", padding: 28, minHeight: 120, borderBottom: "1px solid rgba(255,255,255,0.03)", textAlign: "center", color: "rgba(255,255,255,0.9)", fontWeight: 900 }}>
-								<div style={{ gridColumn: "1 / -1" }}>Fetching servers — table temporarily empty</div>
-							</div>
-						) : paginated.length === 0 ? (
+						{paginated.length === 0 && !isFetching ? (
 							<div style={{ padding: 28, textAlign: "center", color: "rgba(255,255,255,0.85)", fontWeight: 700 }}>No servers found — try adjusting filters</div>
 						) : (
 							<>
 								<style>{`
-									.server-card { display: grid; grid-template-columns: 360px 180px 140px 180px 140px 140px 220px 140px; align-items: center; gap: 8px; padding: 14px; margin-bottom: 12px; background: rgba(10,8,15,0.45); border-radius: 12px; border: 1px solid rgba(139,40,255,0.22); box-shadow: 0 8px 30px rgba(139,40,255,0.06), 0 0 18px rgba(139,40,255,0.06) inset; transition: transform 0.14s ease, box-shadow 0.14s ease; }
-									.server-card:hover { transform: translateY(-4px); box-shadow: 0 18px 50px rgba(139,40,255,0.12), 0 0 28px rgba(139,40,255,0.12) inset; }
+									.server-card {
+										position: relative; overflow: hidden;
+										display: grid; grid-template-columns: 360px 180px 140px 180px 140px 140px 220px 140px;
+										align-items: center; gap: 8px; padding: 14px; margin-bottom: 12px;
+										background: rgba(10,8,15,0.45); border-radius: 12px;
+										border: 1px solid rgba(139,40,255,0.22);
+										box-shadow: 0 8px 30px rgba(139,40,255,0.06), 0 0 18px rgba(139,40,255,0.06) inset;
+										transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+									}
+									.server-card::before {
+										content: ""; position: absolute; inset: 0; width: 100%;
+										background: linear-gradient(90deg, rgba(139,40,255,0.04), rgba(139,40,255,0.18), rgba(139,40,255,0.04));
+										transform: translateX(-110%); transition: transform .48s ease; pointer-events: none; z-index: 1;
+									}
+									.server-card::after {
+										content: "GET SLIDING"; position: absolute; inset: 0; width: 100%;
+										display: flex; align-items: center; padding-left: 18px;
+										font-weight: 1000; font-size: 22px; letter-spacing: 3px; color: rgba(255,255,255,0.9);
+										text-shadow: 0 2px 10px rgba(139,40,255,0.45);
+										background: linear-gradient(90deg, rgba(139,40,255,0.10), rgba(139,40,255,0.30), rgba(139,40,255,0.10));
+										backdrop-filter: blur(2px);
+										border-right: 1px solid rgba(139,40,255,0.26);
+										transform: translateX(-110%); transition: transform 1.2s ease, opacity .5s ease; transition-delay: .08s;
+										opacity: 0; pointer-events: none; z-index: 2;
+									}
+									.server-card:hover::before { transform: translateX(210%); }
+									.server-card:hover::after { transform: translateX(210%); opacity: 1; }
+									.server-card:hover {
+										transform: translateY(-4px) translateX(2px);
+										box-shadow: 0 18px 50px rgba(139,40,255,0.12), 0 0 28px rgba(139,40,255,0.12) inset;
+										border-color: rgba(139,40,255,0.36);
+									}
 									.server-card.changed { animation: row-flash 2.2s ease; box-shadow: 0 20px 48px rgba(124,58,237,0.12), 0 0 24px rgba(124,58,237,0.06) inset; }
-									@keyframes row-flash { 0% { background: linear-gradient(90deg, rgba(34,197,94,0.12), rgba(124,58,237,0.06)); transform: translateY(-2px); } 40% { background: rgba(10,8,15,0.62); transform: translateY(0); } 100% { background: rgba(10,8,15,0.45); transform: translateY(0); } }
+									@keyframes row-flash {
+										0% { background: linear-gradient(90deg, rgba(34,197,94,0.12), rgba(124,58,237,0.06)); transform: translateY(-2px); }
+										40% { background: rgba(10,8,15,0.62); transform: translateY(0); }
+										100% { background: rgba(10,8,15,0.45); transform: translateY(0); }
+									}
 								`}</style>
 
-								{paginated.map((s) => (
-									<ServerRow
-										key={s.id}
-										server={s}
-										// Show only live JSON values; if undefined, the row will display "—" until fetched
-										stat={serverCounts[s.id]}
-										changed={changedIds.has(s.id)}
-										isFetching={isFetching}
-										onJoin={(server, url) => openJoinModal(server, url, 5)}
-										onOffline={(name) => openOfflineModal(name)}
-										tierLabel={tierLabel}
-										tierColor={tierColor}
-									/>
-								))}
+								{isFetching && paginated.length === 0
+									? Array.from({ length: Math.min(8, pageSize) }).map((_, i) => (
+										<div key={`skeleton-${i}`} className="server-card">
+											<Skeleton variant="rectangular" height={72} sx={{ gridColumn: "1 / -1", bgcolor: "rgba(255,255,255,0.06)" }} />
+										</div>
+									  ))
+									: paginated.map((s) => (
+										<ServerRow
+											key={s.id}
+											server={s}
+											// Show only live JSON values; if undefined, the row will display "—" until fetched
+											stat={serverCounts[s.id]}
+											changed={changedIds.has(s.id)}
+											isFetching={isFetching}
+											onJoin={(server, url) => openJoinModal(server, url, 5)}
+											onOffline={(name) => openOfflineModal(name)}
+											tierLabel={tierLabel}
+											tierColor={tierColor}
+										/>
+									))}
 							</>
 						)}
 					</div>
 
-					{!isFetching && (
-						<div style={{ display: "flex", justifyContent: "center", paddingTop: 12 }}>
-							<Pagination count={pageCount} page={pageIdx} onChange={(_, v) => setPageIdx(v)} color="primary" siblingCount={1} boundaryCount={1} showFirstButton showLastButton sx={{ "& .MuiPaginationItem-root": { color: "#fff" }, "& .Mui-selected": { background: "#7c3aed" } }} />
+					{/* footer with page size + pagination */}
+					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12 }}>
+						<div style={{ display: "flex", alignItems: "center", gap: 10, opacity: 0.9 }}>
+							<span style={{ fontWeight: 700 }}>Rows per page:</span>
+							<Select
+								value={pageSize}
+								onChange={(e) => setPageSize(Number(e.target.value))}
+								size="small"
+								sx={{ minWidth: 72, height: 30, color: "#fff" }}
+							>
+								<MenuItem value={10}>10</MenuItem>
+								<MenuItem value={25}>25</MenuItem>
+								<MenuItem value={50}>50</MenuItem>
+							</Select>
 						</div>
-					)}
+						<Pagination count={pageCount} page={pageIdx} onChange={(_, v) => setPageIdx(v)} color="primary" siblingCount={1} boundaryCount={1} showFirstButton showLastButton sx={{ "& .MuiPaginationItem-root": { color: "#fff" }, "& .Mui-selected": { background: "#7c3aed" } }} />
+					</div>
 				</div>
 
 				<FilterModal
@@ -667,7 +941,25 @@ export default function page() {
 					tierColor={tierColor}
 				/>
 
-				<OfflineModal open={offlineModalOpen} onClose={closeOfflineModal} name={offlineServerName} />
+				{/* Inline Offline Modal with "Join anyway" */}
+				<Dialog
+					open={offlineModalOpen}
+					onClose={closeOfflineModal}
+					PaperProps={{ sx: { bgcolor: "rgba(20,18,26,0.96)", border: "1px solid rgba(124,58,237,0.25)", color: "#fff" } }}
+				>
+					<DialogTitle sx={{ fontWeight: 900 }}>Server appears offline</DialogTitle>
+					<DialogContent sx={{ opacity: 0.95 }}>
+						{offlineServerName ? `“${offlineServerName}” seems to be offline right now.` : "This server seems to be offline right now."}
+						<br />
+						You can still try to join via Content Manager.
+					</DialogContent>
+					<DialogActions sx={{ p: 2, gap: 1 }}>
+						<Button onClick={closeOfflineModal} variant="text" sx={{ color: "#fff" }}>Close</Button>
+						<Button onClick={joinAnyway} variant="contained" sx={{ background: "#7c3aed", "&:hover": { background: "#6d28d9" } }}>
+							Join anyway
+						</Button>
+					</DialogActions>
+				</Dialog>
 
 				<ContactUs />
 			</div>
@@ -687,10 +979,15 @@ const deriveCounts = (body: any, s: Server): { players: number; maxPlayers: numb
 			return { players: b.clients, maxPlayers: b.maxclients };
 		}
 
-		// Other common keys as fallback
+		// Other common keys as fallback (expanded)
 		const nums = (keys: string[]) => keys.find((k) => typeof b?.[k] === "number") as string | undefined;
-		const playersKey = nums(["clients","Clients","players","Players","currentPlayers","playersCount","playerCount","connected","DriverCount","drivercount","carCount"]);
-		const maxKey = nums(["maxclients","maxClients","maxPlayers","MaxPlayers","max","max_players","capacity","slots","max_slots","MaxClients"]);
+		const playersKey = nums([
+			"clients","Clients","players","Players","currentPlayers","playersCount","playerCount",
+			"connected","DriverCount","drivercount","carCount","NumPlayers","numplayers","online","OnlinePlayers","Current"
+		]);
+		const maxKey = nums([
+			"maxclients","maxClients","maxPlayers","MaxPlayers","max","max_players","capacity","slots","max_slots","MaxClients","Capacity"
+		]);
 		const players = playersKey ? b[playersKey] : undefined;
 		const maxPlayers = maxKey ? b[maxKey] : (typeof s.maxPlayers === "number" ? s.maxPlayers : undefined);
 		if (typeof players === "number" && typeof maxPlayers === "number") {
@@ -709,13 +1006,14 @@ async function fetchServerCount(
 ): Promise<{ players: number; maxPlayers: number; chosen?: { base: string; path: string; protocol: "http" | "https" } } | undefined> {
 	const host = s.host || DEFAULT_IP;
 	const bases = [`http://${host}:${s.httpPort}`, `https://${host}:${s.httpPort}`];
-	// Try multiple common endpoints — keep /info first, then common fallbacks
+	// Try multiple common endpoints — expanded
 	const paths = [
-		"/info", "/INFO",
+		"/info", "/INFO", "/info?json=1",
 		"/json", "/JSON", "/statusJSON",
-		"/status", "/players.json",
-		"/entrylist", "/api/entrylist", "/api/session", "/session",
-		"/players", "/clients",
+		"/status", "/status.json", "/players.json",
+		"/api/info", "/api/status", "/api/session",
+		"/entrylist", "/api/entrylist", "/session",
+		"/players", "/clients", "/server/status", "/live/status",
 	];
 
 	// Build candidate list; if we have a working hint, try it first
@@ -724,7 +1022,7 @@ async function fetchServerCount(
 	for (const base of bases) {
 		for (const path of paths) {
 			const protocol = base.startsWith("https://") ? "https" : "http";
-			if (hint && hint.base === base && hint.path === path) continue; // already added
+			if (hint && hint.base === base && hint.path === path) continue;
 			candidates.push({ base, path, protocol });
 		}
 	}
@@ -732,7 +1030,7 @@ async function fetchServerCount(
 	for (const cand of candidates) {
 		const { base, path, protocol } = cand;
 		const url = `${base}${path}`;
-		const isInfo = path.toLowerCase() === "/info";
+		const isInfo = path.toLowerCase().startsWith("/info");
 		const isHttps = protocol === "https";
 		const proxied = (tmo: number) => `/api/proxy?u=${encodeURIComponent(url)}&t=${tmo}&q=1`;
 		const attempts = isInfo ? 2 : 1;
@@ -740,45 +1038,38 @@ async function fetchServerCount(
 			let tmo = isInfo
 				? (attempt === 0 ? Math.max(2000, perRequestTimeout) : Math.max(5000, perRequestTimeout * 2))
 				: perRequestTimeout;
-			// HTTPS can be slower — don't clamp too aggressively
 			if (isHttps) tmo = attempt === 0 ? Math.max(tmo, 3500) : Math.max(tmo, 6000);
-			if (isInfo && DEBUG_INFO) console.log(`[servers] /info try a=${attempt + 1}/${attempts} tmo=${tmo} url=${url}`);
 
 			try {
 				const res = await fetchWithTimeout(proxied(tmo), tmo + 1500);
-				if (!res.ok) {
-					if (isInfo && DEBUG_INFO) console.warn(`[servers] /info not ok status=${res.status} url=${url}`);
-					continue;
-				}
+				if (!res.ok) continue;
+
 				const ct = (res.headers.get("content-type") || "").toLowerCase();
 				let body: any = null;
-				if (ct.includes("application/json")) {
+				if (ct.includes("application/json") || ct.includes("text/json")) {
 					body = await res.json().catch(() => null);
 				} else {
 					const text = await res.text();
-					try {
-						body = JSON.parse(text);
-					} catch {
-						body = null;
+					try { body = JSON.parse(text); } catch { body = null; }
+				}
+				if (body) {
+					const counts = deriveCounts(body, s);
+					if (counts) {
+						return { ...counts, chosen: cand };
 					}
 				}
-				if (body == null || (typeof body !== "object" && typeof body !== "number")) {
-					if (isInfo && DEBUG_INFO) console.warn(`[servers] /info invalid JSON url=${url}`);
-					continue;
-				}
-
-				const derived = deriveCounts(body, s);
-				if (derived) {
-					if (isInfo && DEBUG_INFO) console.log("[servers] /info derived", { url, ...derived });
-					return { ...derived, chosen: { base, path, protocol } };
-				}
-			} catch (err: any) {
-				if (isInfo && DEBUG_INFO) {
-					const msg = err?.name === "AbortError" ? "aborted(timeout)" : `err=${err?.name ?? ""} ${err?.message ?? String(err)}`;
-					console.warn(`[servers] /info ${msg} url=${url}`);
-				}
+			} catch {
+				// ignore and try next candidate
 			}
 		}
 	}
 	return undefined;
+}
+
+function makeCmUrl(s: Server): string {
+	// Use host from config when provided; otherwise fall back to DEFAULT_IP.
+	const host = (s.host && s.host.trim().length > 0) ? s.host.trim() : DEFAULT_IP;
+	// Always use the server's httpPort from config.
+	const port = s.httpPort;
+	return `acmanager://race/online/join?ip=${encodeURIComponent(host)}&httpPort=${encodeURIComponent(String(port))}`;
 }
