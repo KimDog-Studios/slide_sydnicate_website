@@ -90,6 +90,9 @@ export default function page() {
 	const [changedIds, setChangedIds] = useState<Set<string>>(new Set());
 	const changeFlashTimeoutRef = useRef<number | null>(null);
 
+	// progressive background scan cursor
+	const backgroundIdxRef = useRef(0);
+
 	// join modal
 	const [joinModalOpen, setJoinModalOpen] = useState(false);
 	const [joinInfo, setJoinInfo] = useState<{
@@ -166,34 +169,69 @@ export default function page() {
 	const TRAFFICS = useMemo(() => Array.from(new Set(SERVERS.map((s) => s.trafficDensity))).sort(), []);
 	const MAPS = useMemo(() => Array.from(new Set(SERVERS.map((s) => s.map))).sort(), []);
 
-	// filter/sort/page
-	const filtered = useMemo(() => {
-		return SERVERS.filter((s) => {
-			if (searchName && !s.name.toLowerCase().includes(searchName.toLowerCase())) return false;
+	// stable keys for set deps to reduce recalcs
+	const setKey = (s: Set<string>) => (s.size ? [...s].sort().join("|") : "");
+	const selectedTrafficKey = useMemo(() => setKey(selectedTraffic), [selectedTraffic]);
+	const selectedCarPacksKey = useMemo(() => setKey(selectedCarPacks), [selectedCarPacks]);
+	const selectedMapsKey = useMemo(() => setKey(selectedMaps), [selectedMaps]);
+	const searchNameLower = useMemo(() => (searchName || "").toLowerCase(), [searchName]);
+
+	// detect tab visibility to pause timers/network when hidden
+	const [isVisible, setIsVisible] = useState(true);
+	useEffect(() => {
+		const onVis = () => setIsVisible(!document.hidden);
+		document.addEventListener("visibilitychange", onVis);
+		return () => document.removeEventListener("visibilitychange", onVis);
+	}, []);
+
+	// unified filter predicate (used in multiple places)
+	const filterPredicate = useCallback(
+		(s: Server) => {
+			if (searchNameLower && !s.name.toLowerCase().includes(searchNameLower)) return false;
 			if (tier !== "All" && s.tier !== tier) return false;
 			if (region !== "All" && s.region !== region) return false;
-			if (s.players < minPlayers) return false;
-			if (s.players > maxPlayers) return false;
+
+			// use live counts (fallback to config) for players range checks
+			const live = serverCounts[s.id];
+			const livePlayers = live?.players ?? s.players;
+			const liveMax = live?.maxPlayers ?? s.maxPlayers;
+			if (livePlayers < minPlayers) return false;
+			if (livePlayers > maxPlayers) return false;
+
 			if (selectedTraffic.size > 0 && !selectedTraffic.has(s.trafficDensity)) return false;
 			const carPackKey = s.carPack ?? "Default";
 			if (selectedCarPacks.size > 0 && !selectedCarPacks.has(carPackKey)) return false;
 			if (selectedMaps.size > 0 && !selectedMaps.has(s.map)) return false;
+
 			// hide offline servers unless explicitly included
 			if (!showOffline) {
-				// Only hide when we positively know it's offline; include unknowns so first view isn't empty
-				const stat = serverCounts[s.id];
+				const stat = live;
 				if (stat && stat.online !== true) return false;
 			}
 			return true;
-		});
-	}, [searchName, tier, region, minPlayers, maxPlayers, selectedTraffic, selectedCarPacks, selectedMaps, showOffline, serverCounts]);
+		},
+		[
+			searchNameLower,
+			tier,
+			region,
+			minPlayers,
+			maxPlayers,
+			selectedTrafficKey,
+			selectedCarPacksKey,
+			selectedMapsKey,
+			showOffline,
+			serverCounts
+		]
+	);
+
+	// filter/sort/page
+	const filtered = useMemo(() => SERVERS.filter(filterPredicate), [filterPredicate]);
 
 	const displayed = useMemo(() => {
 		const arr = [...filtered];
 		arr.sort((a, b) => {
 			let cmp = 0;
 			if (orderBy === "players") {
-				// Use only live JSON counts; avoid falling back to config values
 				const pa = serverCounts[a.id]?.players ?? 0;
 				const pb = serverCounts[b.id]?.players ?? 0;
 				cmp = pa - pb;
@@ -221,28 +259,13 @@ export default function page() {
 	}, [searchName, tier, region, minPlayers, maxPlayers, selectedCarPacks, selectedMaps, selectedTraffic, showOffline]);
 
 	// when hiding offline servers, prefetch live status for all filtered candidates
-	// so the table and pagination reflect only online servers
-	const filteredIds = useMemo(() => SERVERS
-		.filter((s) => {
-			if (searchName && !s.name.toLowerCase().includes(searchName.toLowerCase())) return false;
-			if (tier !== "All" && s.tier !== tier) return false;
-			if (region !== "All" && s.region !== region) return false;
-			if (s.players < minPlayers) return false;
-			if (s.players > maxPlayers) return false;
-			if (selectedTraffic.size > 0 && !selectedTraffic.has(s.trafficDensity)) return false;
-			const carPackKey = s.carPack ?? "Default";
-			if (selectedCarPacks.size > 0 && !selectedCarPacks.has(carPackKey)) return false;
-			if (selectedMaps.size > 0 && !selectedMaps.has(s.map)) return false;
-			return true;
-		})
-		.map((s) => s.id), [searchName, tier, region, minPlayers, maxPlayers, selectedTraffic, selectedCarPacks, selectedMaps]);
+	const filteredIds = useMemo(() => SERVERS.filter(filterPredicate).map((s) => s.id), [filterPredicate]);
 
 	useEffect(() => {
-		if (showOffline) return; // no need when showing offline
+		if (showOffline) return;
 		// find filtered servers that don't have a status yet
 		const missing = SERVERS.filter((s) => filteredIds.includes(s.id) && serverCounts[s.id] === undefined);
 		if (missing.length === 0) return;
-		// background prefetch without toggling isFetching to avoid UI flicker
 		void (async () => {
 			try {
 				await fetchCountsForServers(missing, { concurrency: 2, perRequestTimeout: 2500 });
@@ -251,11 +274,14 @@ export default function page() {
 			}
 		})();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [filteredIds.join(","), showOffline]);
+	}, [filteredIds.join("|"), showOffline]);
 
 	// counts fetch: limited concurrency workers, mark offline when miss
-	const fetchCountsForServers = useCallback(async (servers: Server[], opts?: { concurrency?: number; perRequestTimeout?: number }) => {
-		const concurrency = Math.max(1, opts?.concurrency ?? 2);
+	const fetchCountsForServers = useCallback(async (servers: Server[], opts?: { concurrency?: number; perRequestTimeout?: number; strictOffline?: boolean }) => {
+		// adaptive concurrency: scale within [2..6] if available
+		const hc = (typeof navigator !== "undefined" && (navigator as any).hardwareConcurrency) ? (navigator as any).hardwareConcurrency : 4;
+		const adaptive = Math.min(6, Math.max(2, Math.floor(hc / 2)));
+		const concurrency = Math.max(1, opts?.concurrency ?? adaptive);
 		const perRequestTimeout = opts?.perRequestTimeout ?? 2500;
 		const results: Record<string, { players: number; maxPlayers: number; chosen?: { base: string; path: string; protocol: "http" | "https" } }> = {};
 		let idx = 0;
@@ -279,33 +305,36 @@ export default function page() {
 		});
 		await Promise.all(workers);
 
-		// Build final map with online/offline
+		// Build final map with online/offline (gentler for brand-new entries)
 		const final: Record<string, LiveCount> = {};
+		const missesToOffline = opts?.strictOffline ? 1 : 2;
 		for (const s of servers) {
 			const hit = results[s.id];
 			if (hit) {
-				// success resets offline strikes
 				offlineStrikesRef.current[s.id] = 0;
-				// Clamp players to [0, max] to avoid bad/stale values
 				const max = Math.max(0, hit.maxPlayers);
 				const players = Math.max(0, Math.min(hit.players, max));
 				final[s.id] = { players, maxPlayers: max, online: true };
 			} else {
-				// increment strikes and only go offline after 2 consecutive misses
 				const prevStrikes = offlineStrikesRef.current[s.id] ?? 0;
 				const strikes = prevStrikes + 1;
 				offlineStrikesRef.current[s.id] = strikes;
 				const prev = serverCounts[s.id];
-				if (prev && strikes < 2) {
-					// keep previous live value to avoid flicker on transient errors
+
+				// If we have a previous value and haven't hit threshold, keep it (avoid flicker)
+				if (prev && strikes < missesToOffline) {
 					final[s.id] = prev;
+				} else if (!prev && strikes < missesToOffline) {
+					// First miss on a brand-new server: keep unknown (don't force offline yet)
+					// skip adding to final to avoid overwriting an eventual newer value
+					continue;
 				} else {
+					// Threshold reached: mark offline with safe defaults
 					final[s.id] = { players: 0, maxPlayers: s.maxPlayers ?? 0, online: false };
 				}
 			}
 		}
 
-		// Merge + compute changed ids to flash
 		setServerCounts((prev) => {
 			const next: Record<string, LiveCount> = { ...prev, ...final };
 			const changed = new Set<string>();
@@ -326,11 +355,13 @@ export default function page() {
 	}, []);
 
 	// do refresh for current page
+	const isAutoRefreshPaused = !isVisible || filterModalOpen || joinModalOpen || offlineModalOpen;
 	const doRefresh = useCallback(async () => {
-		if (isFetching) return;
+		if (isFetching || isAutoRefreshPaused || paginated.length === 0) return;
 		setIsFetching(true);
 		try {
-			await promiseWithTimeout(fetchCountsForServers(paginated, { concurrency: 2, perRequestTimeout: 2500 }), 12000);
+			// small bump to help first-page succeed faster
+			await promiseWithTimeout(fetchCountsForServers(paginated, { concurrency: 3, perRequestTimeout: 3000 }), 15000);
 		} catch {
 			// ignore
 		} finally {
@@ -338,15 +369,16 @@ export default function page() {
 			setSecondsLeft(60);
 			setRefreshKey((k) => k + 1);
 		}
-	}, [isFetching, paginated, fetchCountsForServers]);
+	}, [isFetching, isAutoRefreshPaused, paginated, fetchCountsForServers]);
 
-	// initial/page-change fetch
+	// initial/page-change fetch (prioritize current page)
 	useEffect(() => {
+		if (paginated.length === 0) return;
 		let cancelled = false;
 		(async () => {
 			setIsFetching(true);
 			try {
-				await promiseWithTimeout(fetchCountsForServers(paginated, { concurrency: 2, perRequestTimeout: 2500 }), 12000);
+				await promiseWithTimeout(fetchCountsForServers(paginated, { concurrency: 3, perRequestTimeout: 3000 }), 15000);
 			} catch {
 				// ignore
 			} finally {
@@ -359,13 +391,65 @@ export default function page() {
 		return () => {
 			cancelled = true;
 		};
-	}, [paginatedIds, fetchCountsForServers]);
+	}, [paginatedIds, fetchCountsForServers, paginated.length]);
 
-	// countdown -> auto refresh
+	// prefetch the next page to reduce "—" on pagination
+	const nextPageServers = useMemo(() => {
+		// compute next slice if it exists
+		return (pageIdx < Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)))
+			? filtered.slice(pageIdx * PAGE_SIZE, (pageIdx + 1) * PAGE_SIZE)
+			: [];
+	}, [filtered, pageIdx]);
+	useEffect(() => {
+		if (nextPageServers.length === 0 || isAutoRefreshPaused) return;
+		void (async () => {
+			try {
+				await fetchCountsForServers(nextPageServers, { concurrency: 2, perRequestTimeout: 2800 });
+			} catch {
+				// ignore
+			}
+		})();
+	}, [fetchCountsForServers, isAutoRefreshPaused, nextPageServers.map(s => s.id).join("|")]);
+
+	// progressive background prefetch for the rest (small batches, low pressure)
+	useEffect(() => {
+		let stopped = false;
+		const tick = async () => {
+			if (stopped || isAutoRefreshPaused) return;
+			// Skip current page; background-scan others in a rotating window
+			const pageSet = new Set(paginated.map((s) => s.id));
+			const pool = SERVERS.filter((s) => !pageSet.has(s.id));
+			if (pool.length === 0) return;
+
+			const start = backgroundIdxRef.current % pool.length;
+			const batchSize = 12;
+			const batch: Server[] = [];
+			for (let i = 0; i < pool.length && batch.length < batchSize; i++) {
+				batch.push(pool[(start + i) % pool.length]);
+			}
+			backgroundIdxRef.current = start + batch.length;
+
+			try {
+				await fetchCountsForServers(batch, { concurrency: 3, perRequestTimeout: 2800 });
+			} catch {
+				// ignore
+			}
+		};
+
+		// run once quickly, then at intervals
+		void tick();
+		const id = setInterval(() => void tick(), 3000);
+		return () => {
+			stopped = true;
+			clearInterval(id);
+		};
+	}, [fetchCountsForServers, isAutoRefreshPaused, paginatedIds]);
+
+	// countdown -> auto refresh (paused when hidden or modal open)
 	useEffect(() => {
 		const id = setInterval(() => {
 			setSecondsLeft((s) => {
-				if (isFetching) return s;
+				if (isFetching || isAutoRefreshPaused) return s;
 				if (s <= 1) {
 					doRefresh();
 					return 60;
@@ -374,7 +458,7 @@ export default function page() {
 			});
 		}, 1000);
 		return () => clearInterval(id);
-	}, [doRefresh, isFetching]);
+	}, [doRefresh, isFetching, isAutoRefreshPaused]);
 
 	// manual refresh
 	const refreshNow = async () => {
@@ -447,7 +531,7 @@ export default function page() {
 	const totalPlayers = useMemo(() => SERVERS.reduce((sum, s) => sum + (serverCounts[s.id]?.players ?? 0), 0), [serverCounts]);
 	const totalMaxPlayers = useMemo(() => SERVERS.reduce((sum, s) => sum + (serverCounts[s.id]?.maxPlayers ?? s.maxPlayers ?? 0), 0), [serverCounts]);
 
-	// UI (unchanged look-and-feel)
+	// UI
 	return (
 		<React.Fragment>
 			<div>

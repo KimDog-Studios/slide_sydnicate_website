@@ -5,7 +5,7 @@ export type Server = {
 	region: string
 	players: number
 	maxPlayers: number
-	trafficDensity: "None" | "Low" | "Medium" | "High"
+	trafficDensity: "None" | "Low" | "Medium" | "High" | "Light" | "Heavy" | "Realistic"
 	map: string
 	thumbnail?: string
 	httpPort: number

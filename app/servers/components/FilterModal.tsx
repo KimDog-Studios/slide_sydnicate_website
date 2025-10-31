@@ -52,6 +52,9 @@ export default function FilterModal(props: Props) {
 		tierLabel
 	} = props;
 
+	// Fixed traffic options for the filters
+	const TRAFFIC_OPTIONS = ["None", "Light", "Heavy", "Realistic"];
+
 	return (
 		<Dialog
 			open={open}
@@ -104,7 +107,7 @@ export default function FilterModal(props: Props) {
 					<div style={{ padding: 14, borderRadius: 10, background: "rgba(139,40,255,0.06)", border: "1px solid rgba(139,40,255,0.22)", boxShadow: "0 8px 20px rgba(139,40,255,0.04)" }}>
 						<div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Traffic Density</div>
 						<FormGroup>
-							{TRAFFICS.map((t) => (
+							{TRAFFIC_OPTIONS.map((t) => (
 								<FormControlLabel key={t} control={<Checkbox checked={selectedTraffic.has(t)} onChange={() => toggleSetValue(selectedTraffic, t, setSelectedTraffic)} sx={{ color: "rgba(139,40,255,0.9)" }} />} label={t} />
 							))}
 						</FormGroup>

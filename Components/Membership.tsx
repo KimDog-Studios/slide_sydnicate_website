@@ -33,7 +33,7 @@ import PaymentIcon from "@mui/icons-material/Payment";
 
 // Use minLevel to control when a feature unlocks
 const featureCatalog = [
-	{ key: "access", label: "Access to 50+ public servers", minLevel: 0 },
+	{ key: "access", label: "Access to 100+ public servers", minLevel: 0 },
 	{ key: "updates", label: "Monthly public car updates", minLevel: 0 },
 	{ key: "support", label: "Help & FAQ support", minLevel: 0 },
 	{ key: "badges", label: "In-game badges", minLevel: 0 },
