@@ -149,7 +149,7 @@ export const SERVERS: Server[] = [
 	// ==========================================
 	// 🏁 Slide Syndicate — DEV Servers
 	// ==========================================
-	{ id: "kimdog_dev_1", name: "ADC Klutch Kickers", tier: "Pro Line", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "ADC Klutch Kickers", httpPort: 9001, carPack: "KimDog Car Pack 2.0", thumbnail: "..." },
+	{ id: "kimdog_dev_1", name: "ADC Klutch Kickers", tier: "Pro Line", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "ADC Klutch Kickers", httpPort: 8001, carPack: "KimDog Car Pack 2.0", thumbnail: "..." },
 	];
 
 // set thumbnails for all KimDogStreet servers
