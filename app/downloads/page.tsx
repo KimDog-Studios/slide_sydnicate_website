@@ -345,6 +345,11 @@ export default function DownloadsPage() {
 		scrollToTop();
 	}, [page]);
 
+	// totals
+	const modTotal = items.length;
+	const carsTotal = items.filter(i => i.type === "car").length;
+	const packsTotal = items.filter(i => i.type === "pack").length;
+
 	return (
 		<Box sx={{ maxWidth: 1280, mx: "auto", px: { xs: 2, md: 3 }, py: { xs: 3, md: 16 }, color: "#e5e7eb" }}>
 			<Stack spacing={2} sx={{ mb: 2 }}>
@@ -412,6 +417,13 @@ export default function DownloadsPage() {
 					<Button onClick={f.reset} variant="outlined" size="small" sx={{ color: "#fff", borderColor: "rgba(255,255,255,0.22)" }}>
 						Reset
 					</Button>
+				</Stack>
+
+				{/* Totals under Reset */}
+				<Stack direction="row" justifyContent="flex-end" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
+					<Chip label={`${modTotal} Mods`} size="small" variant="outlined" sx={{ color: "#fff", borderColor: "rgba(255,255,255,0.22)" }} />
+					<Chip label={`${carsTotal} Cars`} size="small" variant="outlined" sx={{ color: "#fff", borderColor: "rgba(255,255,255,0.22)" }} />
+					<Chip label={`${packsTotal} Car Packs`} size="small" variant="outlined" sx={{ color: "#fff", borderColor: "rgba(255,255,255,0.22)" }} />
 				</Stack>
 
 				{/* Type filters */}

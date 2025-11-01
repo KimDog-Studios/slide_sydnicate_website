@@ -8,6 +8,7 @@ import ContactUs from "@/Components/ContactUs";
 import TwitterIcon from "@mui/icons-material/Twitter";
 import YouTubeIcon from "@mui/icons-material/YouTube";
 import InstagramIcon from "@mui/icons-material/Instagram";
+import { downloadsConfig } from "../downloads/config";
 
 // Local Discord SVG icon
 const DiscordLogo: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
@@ -17,6 +18,9 @@ const DiscordLogo: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 );
 
 export default function AboutPage() {
+	const modTotal = downloadsConfig.items.length;
+	const carsTotal = downloadsConfig.items.filter(i => i.type === "car").length;
+	const packsTotal = downloadsConfig.items.filter(i => i.type === "pack").length;
 	return (
 		<React.Fragment>
 			<style>{`
@@ -103,6 +107,9 @@ export default function AboutPage() {
 							<div className="stat"><div className="num">{ABOUT.stats.playersMonthly}</div><div style={{ opacity: 0.85, fontWeight: 800 }}>Players / month</div></div>
 							<div className="stat"><div className="num">{ABOUT.stats.servers}</div><div style={{ opacity: 0.85, fontWeight: 800 }}>Servers</div></div>
 							<div className="stat"><div className="num">{ABOUT.stats.maps}</div><div style={{ opacity: 0.85, fontWeight: 800 }}>Maps</div></div>
+							<div className="stat"><div className="num">{modTotal}</div><div style={{ opacity: 0.85, fontWeight: 800 }}>Mods</div></div>
+							<div className="stat"><div className="num">{carsTotal}</div><div style={{ opacity: 0.85, fontWeight: 800 }}>Cars</div></div>
+							<div className="stat"><div className="num">{packsTotal}</div><div style={{ opacity: 0.85, fontWeight: 800 }}>Car Packs</div></div>
 							<div className="stat"><div className="num">{ABOUT.stats.regions}</div><div style={{ opacity: 0.85, fontWeight: 800 }}>Regions</div></div>
 						</div>
 
