@@ -140,6 +140,36 @@ export const SERVERS: Server[] = [
 	{ id: "syndicate_wdts_25", name: "Tamworth UK Streets", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Tamworth UK Streets", httpPort: 9725, carPack: "WDTS", thumbnail: "..." },
 	{ id: "syndicate_wdts_26", name: "Total Drift Challenge", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Total Drift Challenge", httpPort: 9726, carPack: "WDTS", thumbnail: "..." },
 	// ==========================================
+	// 🏁 Slide Syndicate — DWG Servers
+	// ==========================================
+	{ id: "syndicate_dwg_0",  name: "Adam LZ Compound",         tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Adam LZ Compound",         httpPort: 10100, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_1",  name: "Backwoods",                 tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Backwoods",                 httpPort: 10101, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_2",  name: "Brooklyn Park Remastered",  tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Brooklyn Park Remastered",  httpPort: 10102, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_3",  name: "Brooklyn Park",             tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Brooklyn Park",             httpPort: 10103, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_4",  name: "CG Bashlands",              tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "CG Bashlands",              httpPort: 10104, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_5",  name: "CG Sequoia Park",           tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "CG Sequoia Park",           httpPort: 10105, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_6",  name: "CG Sunrise Drift V2",       tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "CG Sunrise Drift V2",       httpPort: 10106, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_7",  name: "Drift Playground",          tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Drift Playground",          httpPort: 10107, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_8",  name: "Ebisu Complex",             tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu Complex",             httpPort: 10108, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_9",  name: "Ebisu Minami",              tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu Minami",              httpPort: 10109, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_10", name: "Ebisu Nishi Long",          tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu Nishi Long",          httpPort: 10110, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_11", name: "Ebisu North Course",        tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu North Course",        httpPort: 10111, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_12", name: "Ebisu School Course",       tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu School Course",       httpPort: 10112, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_13", name: "Fort 51",                   tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Fort 51",                   httpPort: 10113, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_14", name: "Full Send Drift Park",      tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Full Send Drift Park",      httpPort: 10114, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_15", name: "Grange Motor Circuit",      tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Grange Motor Circuit",      httpPort: 10115, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_16", name: "Klutch Kickers Winter",     tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Klutch Kickers Winter",     httpPort: 10116, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_17", name: "Klutch Kickers",            tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Klutch Kickers",            httpPort: 10117, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_18", name: "Kunitomi Circuit",          tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Kunitomi Circuit",          httpPort: 10118, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_19", name: "Minecraft World",           tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Minecraft World",           httpPort: 10119, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_20", name: "Nexus City",                tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Nexus City",                httpPort: 10120, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_21", name: "OI Wharf",                  tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "OI Wharf",                  httpPort: 10121, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_22", name: "Owara",                     tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Owara",                     httpPort: 10122, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_23", name: "Shibuya Drift",             tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Shibuya Drift",             httpPort: 10123, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_24", name: "Steel Yard",                tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Steel Yard",                httpPort: 10124, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_25", name: "Tamworth UK Streets",       tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Tamworth UK Streets",       httpPort: 10125, carPack: "DWG", thumbnail: "..." },
+	{ id: "syndicate_dwg_26", name: "Total Drift Challenge",     tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Total Drift Challenge",     httpPort: 10126, carPack: "DWG", thumbnail: "..." },
+	// ==========================================
 	// 🏁 Slide Syndicate — KimDog Hesi Servers
 	// ==========================================
 	{ id: "kimdog_hesi_1", name: "KimDog Hesi - SRP - Light", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "SRP", httpPort: 9900, carPack: "KimDog Hesi", thumbnail: "..." },
@@ -179,6 +209,14 @@ const WDTS_THUMBNAIL = "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20C
 for (const s of SERVERS) {
 	if (s.carPack === "WDTS") {
 		s.thumbnail = WDTS_THUMBNAIL;
+	}
+}
+
+// DWG thumbnail
+const DWG_THUMBNAIL = "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/DWG-Logo.webp";
+for (const s of SERVERS) {
+	if (s.carPack === "DWG") {
+		s.thumbnail = DWG_THUMBNAIL;
 	}
 }
 
