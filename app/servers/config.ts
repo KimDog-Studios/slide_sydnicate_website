@@ -79,36 +79,6 @@ export const SERVERS: Server[] = [
 	{ id: "syndicate_simhq_ct_10", name: "Steel Yard", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Steel Yard", httpPort: 9524, carPack: "SimHQ", thumbnail: "..." },
 	{ id: "syndicate_simhq_ct_11", name: "Tamworth UK Streets", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Tamworth UK Streets", httpPort: 9525, carPack: "SimHQ", thumbnail: "..." },
 	{ id: "syndicate_simhq_ct_12", name: "Total Drift Challenge", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Total Drift Challenge", httpPort: 9526, carPack: "SimHQ", thumbnail: "..." },
-	// ==========================================
-	// 🏁 Slide Syndicate — Gravy Garage Servers
-	// ==========================================
-	{ id: "syndicate_gravy_0", name: "ADC Klutch Kickers", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "ADC Klutch Kickers", httpPort: 9316, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_1", name: "Adam LZ Compound", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Adam LZ Compound", httpPort: 9300, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_2", name: "Backwoods", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Backwoods", httpPort: 9301, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_3", name: "Brooklyn Park", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Brooklyn Park", httpPort: 9302, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_4", name: "Brooklyn Park Remastered", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Brooklyn Park Remastered", httpPort: 9303, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_5", name: "CG Bashlands", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "CG Bashlands", httpPort: 9304, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_6", name: "CG Sequoia Park", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "CG Sequoia Park", httpPort: 9305, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_7", name: "CG Sunrise Drift V2", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "CG Sunrise Drift V2", httpPort: 9306, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_8", name: "Drift Playground", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Drift Playground", httpPort: 9307, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_9", name: "Ebisu Complex", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu Complex", httpPort: 9308, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_10", name: "Ebisu Minami", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu Minami", httpPort: 9309, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_11", name: "Ebisu Nishi Long", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu Nishi Long", httpPort: 9310, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_12", name: "Ebisu North Course", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu North Course", httpPort: 9311, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_13", name: "Ebisu School Course", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Ebisu School Course", httpPort: 9312, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_14", name: "Fort 51", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Fort 51", httpPort: 9313, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_15", name: "Full Send Drift Park", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Full Send Drift Park", httpPort: 9314, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_16", name: "Grange Motor Circuit", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Grange Motor Circuit", httpPort: 9315, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_17", name: "Klutch Kickers Winter", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Klutch Kickers Winter", httpPort: 9317, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_18", name: "Kunitomi Circuit", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Kunitomi Circuit", httpPort: 9318, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_19", name: "Minecraft World", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Minecraft World", httpPort: 9319, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_20", name: "Nexus City", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Nexus City", httpPort: 9320, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_21", name: "OI Wharf", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "OI Wharf", httpPort: 9321, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_22", name: "Owara", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Owara", httpPort: 9322, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_23", name: "Shibuya Drift", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Shibuya Drift", httpPort: 9323, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_24", name: "Steel Yard", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Steel Yard", httpPort: 9324, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_25", name: "Tamworth UK Streets", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Tamworth UK Streets", httpPort: 9325, carPack: "GravyGarage", thumbnail: "..." },
-	{ id: "syndicate_gravy_26", name: "Total Drift Challenge", tier: "Public", region: "EU", players: 0, maxPlayers: 32, trafficDensity: "Low", map: "Total Drift Challenge", httpPort: 9326, carPack: "GravyGarage", thumbnail: "..." },
 	];
 
 // set thumbnails for all KimDogStreet servers
