@@ -408,6 +408,10 @@ const kimdogHesiLinks: string[] = [
 	"kimdog_hesi_dodge_charger_hellcat.zip",
 ];
 
+const devLinks: string[] = [
+	"DEV-Street-Car-Pack.7z"
+];
+
 // DWG cars (Deathwish) — filenames only (easier to add)
 const dwgFiles: string[] = [
 	"dthwsh_nissan_180sx_gcorp.zip",
@@ -478,5 +482,12 @@ downloadsConfig.items.push(
 		minTier: 0,
 		maxTier: 3,
 		image: DWG_THUMB,
+	}),
+	// Dev links
+	...buildFromList(PACKS_BASE, devLinks, {
+		type: "pack",
+		tags: ["dev"],
+		minTier: 3,
+		maxTier: 3,
 	}),
 );
