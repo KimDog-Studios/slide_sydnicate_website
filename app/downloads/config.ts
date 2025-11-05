@@ -62,7 +62,8 @@ const KIMDOG_THUMB = "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Car
 const VDC_THUMB = "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/images.png";
 const MAPS_THUMB = "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/work-in-progress.jpg";
 const KIMDOG_HESI_THUMB = "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/KimDogHesi.jpg";
-const DWG_THUMB = "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/DWG-Logo.webp"
+const DWG_THUMB = "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/DWG-Logo.webp";
+const DEV_PACK_THUMB = "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/Website/KimDog.png";
 
 // Add convenient CDN base paths so lists can use filenames only
 const CDN_BASE = "https://kimdog-modding.b-cdn.net/Assetto%20Corsa%20-%20Cars/";
@@ -489,5 +490,6 @@ downloadsConfig.items.push(
 		tags: ["dev"],
 		minTier: 3,
 		maxTier: 3,
+		image: DEV_PACK_THUMB, // use provided Dev Pack thumbnail
 	}),
 );
